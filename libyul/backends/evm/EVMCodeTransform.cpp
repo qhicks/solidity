@@ -412,7 +412,7 @@ void CodeTransform::operator()(FunctionDefinition const& _function)
 				subTransform.deleteVariable(var);
 		}
 
-	if (!m_allowStackOpt || _function.returnVariables.empty())
+	if (!m_allowStackOpt)
 		subTransform.setupReturnVariablesAndFunctionExit();
 
 	subTransform(_function.body);
@@ -602,6 +602,7 @@ void CodeTransform::visitExpression(Expression const& _expression)
 
 void CodeTransform::setupReturnVariablesAndFunctionExit()
 {
+	yulAssert(isInsideFunction(), "");
 	yulAssert(!returnVariablesAndFunctionExitAreSetup(), "");
 	yulAssert(m_scope, "");
 
@@ -664,7 +665,8 @@ void CodeTransform::visitStatements(vector<Statement> const& _statements)
 	{
 		freeUnusedVariables();
 		if (
-			!m_delayedReturnVariables.empty() &&
+			isInsideFunction() &&
+			!returnVariablesAndFunctionExitAreSetup() &&
 			statementNeedsReturnVariableSetup(statement, m_delayedReturnVariables)
 		)
 			setupReturnVariablesAndFunctionExit();
