@@ -73,12 +73,15 @@ SemanticTest::SemanticTest(
 		BOOST_THROW_EXCEPTION(runtime_error("Invalid compileViaYul value: " + compileViaYul + "."));
 	m_testCaseWantsYulRun = contains(yulRunTriggers, compileViaYul);
 	m_testCaseWantsLegacyRun = contains(legacyRunTriggers, compileViaYul);
+	// HACK:
+	m_testCaseWantsLegacyRun = false;
 
 	// Do not enforce via yul and ewasm, if via yul was explicitly denied.
 	if (compileViaYul == "false")
 	{
 		m_enforceViaYul = false;
 		m_enforceCompileToEwasm = false;
+		m_shouldRun = false;
 	}
 
 	string compileToEwasm = m_reader.stringSetting("compileToEwasm", "false");

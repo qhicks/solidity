@@ -179,9 +179,9 @@ bool FullInliner::shallInline(FunctionCall const& _funCall, YulString _callSite)
 	if (m_pass == Pass::InlineTiny)
 		return false;
 
-	// Do not inline into already big functions.
+/*	// Do not inline into already big functions.
 	if (m_functionSizes.at(_callSite) > 45)
-		return false;
+		return false;*/
 
 	if (m_singleUse.count(calledFunction->name))
 		return true;

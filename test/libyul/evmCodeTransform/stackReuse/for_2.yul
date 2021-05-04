@@ -2,21 +2,18 @@
 // ====
 // stackOptimization: true
 // ----
-// PUSH1 0x0
-// JUMPDEST
-// PUSH1 0x1
-// ISZERO
-// PUSH1 0x14
-// JUMPI
-// PUSH1 0x8
-// SWAP1
-// POP
-// PUSH1 0x3
-// POP
-// JUMPDEST
-// PUSH1 0x2
-// JUMP
-// JUMPDEST
-// POP
-// PUSH1 0x2
-// POP
+//     /* "":17:18   */
+//   0x00
+//     /* "":8:18   */
+//   pop
+//   jump(tag_1)
+// tag_1:
+//     /* "":34:35   */
+//   0x08
+//     /* "":29:35   */
+//   pop
+//     /* "":45:46   */
+//   0x03
+//     /* "":36:46   */
+//   pop
+//   jump(tag_1)

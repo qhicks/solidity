@@ -8,17 +8,4 @@
 // ====
 // stackOptimization: true
 // ----
-// PUSH1 0x10
-// JUMP
-// JUMPDEST
-// POP
-// POP
-// POP
-// POP
-// PUSH1 0x0
-// PUSH1 0x0
-// JUMPDEST
-// SWAP1
-// SWAP2
-// JUMP
-// JUMPDEST
+//   stop

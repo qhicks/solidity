@@ -23,6 +23,7 @@
 
 #include <libyul/backends/evm/EthAssemblyAdapter.h>
 #include <libyul/backends/evm/EVMCodeTransform.h>
+#include <libyul/backends/evm/OptimizedEVMCodeTransform.h>
 #include <libyul/AST.h>
 #include <libyul/AsmAnalysisInfo.h>
 
@@ -44,22 +45,35 @@ void CodeGenerator::assemble(
 {
 	EthAssemblyAdapter assemblyAdapter(_assembly);
 	BuiltinContext builtinContext;
-	CodeTransform transform(
-		assemblyAdapter,
-		_analysisInfo,
-		_parsedData,
-		EVMDialect::strictAssemblyForEVM(_evmVersion),
-		builtinContext,
-		_optimizeStackAllocation,
-		_identifierAccess,
-		_useNamedLabelsForFunctions
-	);
-	transform(_parsedData);
-	if (!transform.stackErrors().empty())
-		assertThrow(
-			false,
-			langutil::StackTooDeepError,
-			"Stack too deep when compiling inline assembly" +
-			(transform.stackErrors().front().comment() ? ": " + *transform.stackErrors().front().comment() : ".")
+	if (_optimizeStackAllocation)
+		OptimizedCodeTransform::run(
+			assemblyAdapter,
+			_analysisInfo,
+			_parsedData,
+			EVMDialect::strictAssemblyForEVM(_evmVersion),
+			builtinContext,
+			_identifierAccess,
+			_useNamedLabelsForFunctions
 		);
+	else
+	{
+		CodeTransform transform(
+			assemblyAdapter,
+			_analysisInfo,
+			_parsedData,
+			EVMDialect::strictAssemblyForEVM(_evmVersion),
+			builtinContext,
+			_optimizeStackAllocation,
+			_identifierAccess,
+			_useNamedLabelsForFunctions
+		);
+		transform(_parsedData);
+		if (!transform.stackErrors().empty())
+			assertThrow(
+				false,
+				langutil::StackTooDeepError,
+				"Stack too deep when compiling inline assembly" +
+				(transform.stackErrors().front().comment() ? ": " + *transform.stackErrors().front().comment() : ".")
+			);
+	}
 }

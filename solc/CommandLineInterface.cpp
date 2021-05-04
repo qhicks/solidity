@@ -1498,6 +1498,9 @@ bool CommandLineInterface::processInput()
 		// TODO: Perhaps we should not compile unless requested
 
 		m_compiler->enableIRGeneration(m_args.count(g_argIR) || m_args.count(g_argIROptimized));
+		// HACK
+		if (m_args.count(g_argIROptimized))
+			m_compiler->enableEvmBytecodeGeneration(false);
 		m_compiler->enableEwasmGeneration(m_args.count(g_argEwasm));
 
 		OptimiserSettings settings = m_args.count(g_argOptimize) ? OptimiserSettings::standard() : OptimiserSettings::minimal();

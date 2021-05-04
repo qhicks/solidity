@@ -295,6 +295,50 @@ decltype(auto) mapTuple(Callable&& _callable)
 	return detail::MapTuple<Callable>{std::forward<Callable>(_callable)};
 }
 
+namespace detail
+{
+
+template<typename Container, typename Value>
+auto findOffset(Container&& _container,  Value&& _value, int)
+-> decltype(_container.find(_value) == _container.end(), std::optional<size_t>())
+{
+	auto it = _container.find(std::forward<Value>(_value));
+	auto end = _container.end();
+	if (it == end)
+		return std::nullopt;
+	return std::distance(it, end);
+}
+template<typename Range, typename Value>
+auto findOffset(Range&& _range, Value&& _value, void*)
+-> decltype(std::find(std::begin(_range), std::end(_range), std::forward<Value>(_value)) == std::end(_range), std::optional<size_t>())
+{
+	auto begin = std::begin(_range);
+	auto end = std::end(_range);
+	auto it = std::find(begin, end, std::forward<Value>(_value));
+	if (it == end)
+		return std::nullopt;
+	return std::distance(begin, it);
+}
+
+}
+
+template<typename Range>
+auto findOffset(Range&& _range, std::remove_reference_t<decltype(*std::cbegin(_range))> const& _value)
+-> decltype(detail::findOffset(std::forward<Range>(_range), _value, 0))
+{
+	return detail::findOffset(std::forward<Range>(_range), _value, 0);
+}
+
+template<typename Range, typename Pred>
+std::optional<size_t> findOffsetPred(Range&& _range, Pred _pred)
+{
+	auto begin = std::begin(_range);
+	auto end = std::end(_range);
+	auto it = std::find_if(begin, end, _pred);
+	if (it == end)
+		return std::nullopt;
+	return std::distance(begin, it);
+}
 
 // String conversion functions, mainly to/from hex/nibble/byte representations.
 
