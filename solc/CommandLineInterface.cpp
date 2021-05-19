@@ -158,6 +158,7 @@ static string const g_strMetadataHash = "metadata-hash";
 static string const g_strMetadataLiteral = "metadata-literal";
 static string const g_strModelCheckerContracts = "model-checker-contracts";
 static string const g_strModelCheckerEngine = "model-checker-engine";
+static string const g_strModelCheckerSolvers = "model-checker-solvers";
 static string const g_strModelCheckerTargets = "model-checker-targets";
 static string const g_strModelCheckerTimeout = "model-checker-timeout";
 static string const g_strNatspecDev = "devdoc";
@@ -232,6 +233,7 @@ static string const g_argMetadataHash = g_strMetadataHash;
 static string const g_argMetadataLiteral = g_strMetadataLiteral;
 static string const g_argModelCheckerContracts = g_strModelCheckerContracts;
 static string const g_argModelCheckerEngine = g_strModelCheckerEngine;
+static string const g_argModelCheckerSolvers = g_strModelCheckerSolvers;
 static string const g_argModelCheckerTargets = g_strModelCheckerTargets;
 static string const g_argModelCheckerTimeout = g_strModelCheckerTimeout;
 static string const g_argNatspecDev = g_strNatspecDev;
@@ -1072,6 +1074,11 @@ General Information)").c_str(),
 			"Select model checker engine."
 		)
 		(
+			g_strModelCheckerSolvers.c_str(),
+			po::value<string>()->value_name("all,cvc4,z3,smtlib2")->default_value("all"),
+			"Select model checker solvers."
+		)
+		(
 			g_strModelCheckerTargets.c_str(),
 			po::value<string>()->value_name("default,constantCondition,underflow,overflow,divByZero,balance,assert,popEmptyArray,outOfBounds")->default_value("default"),
 			"Select model checker verification targets. "
@@ -1454,6 +1461,18 @@ bool CommandLineInterface::processInput()
 		m_modelCheckerSettings.engine = *engine;
 	}
 
+	if (m_args.count(g_argModelCheckerSolvers))
+	{
+		string solversStr = m_args[g_argModelCheckerSolvers].as<string>();
+		optional<smtutil::SMTSolverChoice> solvers = smtutil::SMTSolverChoice::fromString(solversStr);
+		if (!solvers)
+		{
+			serr() << "Invalid option for --" << g_argModelCheckerSolvers << ": " << solversStr << endl;
+			return false;
+		}
+		m_modelCheckerSettings.solvers = *solvers;
+	}
+
 	if (m_args.count(g_argModelCheckerTargets))
 	{
 		string targetsStr = m_args[g_argModelCheckerTargets].as<string>();
@@ -1482,6 +1501,7 @@ bool CommandLineInterface::processInput()
 		if (
 			m_args.count(g_argModelCheckerContracts) ||
 			m_args.count(g_argModelCheckerEngine) ||
+			m_args.count(g_argModelCheckerSolvers) ||
 			m_args.count(g_argModelCheckerTargets) ||
 			m_args.count(g_argModelCheckerTimeout)
 		)
