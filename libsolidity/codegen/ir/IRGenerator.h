@@ -42,11 +42,12 @@ public:
 	IRGenerator(
 		langutil::EVMVersion _evmVersion,
 		RevertStrings _revertStrings,
-		OptimiserSettings _optimiserSettings
+		OptimiserSettings _optimiserSettings,
+		std::map<std::string, unsigned> _sourceIndices
 	):
 		m_evmVersion(_evmVersion),
 		m_optimiserSettings(_optimiserSettings),
-		m_context(_evmVersion, _revertStrings, std::move(_optimiserSettings)),
+		m_context(_evmVersion, _revertStrings, std::move(_optimiserSettings), std::move(_sourceIndices)),
 		m_utils(_evmVersion, m_context.revertStrings(), m_context.functionCollector())
 	{}
 

@@ -90,10 +90,13 @@ object \"C_11\" {
             }
 
             function fun_f_10() -> var__5 {
+                /// @src 0:127,133
                 let zero_t_bytes4_1 := zero_value_for_split_t_bytes4()
                 var__5 := zero_t_bytes4_1
 
+                /// @src 0:144,154
                 let expr_7 := 0x61626364
+                /// @src 0:137,154
                 var__5 := convert_t_rational_1633837924_by_1_to_t_bytes4(expr_7)
                 leave
 

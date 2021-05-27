@@ -191,6 +191,8 @@ private:
 	static Type const& type(Expression const& _expression);
 
 	void setLocation(ASTNode const& _node);
+	std::ostringstream& emitCode();
+
 
 	std::string linkerSymbol(ContractDefinition const& _library) const;
 
@@ -200,6 +202,7 @@ private:
 	YulUtilFunctions& m_utils;
 	std::optional<IRLValue> m_currentLValue;
 	langutil::SourceLocation m_currentLocation;
+	langutil::SourceLocation m_lastLocation = {};
 };
 
 }

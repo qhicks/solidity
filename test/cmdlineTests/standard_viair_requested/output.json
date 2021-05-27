@@ -141,6 +141,7 @@ object \"D_16\" {
 
             function fun_f_15() {
 
+                /// @src 0:134,141
                 let _1 := allocate_unbounded()
                 let _2 := add(_1, datasize(\"C_3\"))
                 if or(gt(_2, 0xffffffffffffffff), lt(_2, _1)) { panic_error_0x41() }
@@ -151,6 +152,7 @@ object \"D_16\" {
 
                 if iszero(expr_12_address) { revert_forward_1() }
 
+                /// @src 0:128,141
                 let var_c_8_address := expr_12_address
 
             }

@@ -978,7 +978,7 @@ void IRGenerator::resetContext(ContractDefinition const& _contract)
 		m_context.internalDispatchClean(),
 		"Reset internal dispatch map without consuming it."
 	);
-	m_context = IRGenerationContext(m_evmVersion, m_context.revertStrings(), m_optimiserSettings);
+	m_context = IRGenerationContext(m_evmVersion, m_context.revertStrings(), m_optimiserSettings, m_context.sourceIndices());
 
 	m_context.setMostDerivedContract(_contract);
 	for (auto const& var: ContractType(_contract).stateVariables())
