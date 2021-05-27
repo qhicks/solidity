@@ -808,7 +808,7 @@ jobs:
 
   t_ems_solcjs:
     docker:
-      - image: buildpack-deps:latest
+      - image: << pipeline.parameters.ubuntu-2004-docker-image >>
     environment:
       TERM: xterm
     steps:
