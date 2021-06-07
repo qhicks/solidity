@@ -54,13 +54,13 @@ StackLayoutGenerator::StackLayoutGenerator(OptimizedCodeTransformContext& _conte
 void StackLayoutGenerator::operator()(DFG::FunctionCall const& _call)
 {
 	(void)_call;
-	DEBUG(cout << "B: function call " << _call.functionCall->functionName.name.str() << ": " << stackToString(*m_stack) << std::endl;)
+	DEBUG(cout << "B: function call " << _call.functionCall.get().functionName.name.str() << ": " << stackToString(*m_stack) << std::endl;)
 }
 
 void StackLayoutGenerator::operator()(DFG::BuiltinCall const& _call)
 {
 	(void)_call;
-	DEBUG(cout << "B: bultin call " << _call.functionCall->functionName.name.str() << ": " << stackToString(*m_stack) << std::endl;)
+	DEBUG(cout << "B: bultin call " << _call.functionCall.get().functionName.name.str() << ": " << stackToString(*m_stack) << std::endl;)
 }
 
 void StackLayoutGenerator::operator()(DFG::Assignment const& _assignment)
@@ -69,10 +69,12 @@ void StackLayoutGenerator::operator()(DFG::Assignment const& _assignment)
 		if (auto const* varSlot = get_if<VariableSlot>(&stackSlot))
 			if (util::findOffset(_assignment.variables, *varSlot))
 				stackSlot = JunkSlot{};
-	DEBUG(cout << "B: assignment (";)
-	for (auto var: _assignment.variables)
-		DEBUG(cout << var.variable->name.str() << " ";)
-	DEBUG(cout << ") pre: " << stackToString(*m_stack) << std::endl;)
+	DEBUG(
+		cout << "B: assignment (";
+		for (auto var: _assignment.variables)
+			cout << var.variable.get().name.str() << " ";
+		cout << ") pre: " << stackToString(*m_stack) << std::endl;
+	)
 }
 
 namespace

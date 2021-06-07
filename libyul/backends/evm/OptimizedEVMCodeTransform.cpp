@@ -119,9 +119,9 @@ AbstractAssembly::LabelID CodeGenerator::getFunctionLabel(Scope::Function const&
 	{
 		m_functionLabels[&functionInfo] = m_useNamedLabelsForFunctions ?
 			m_assembly.namedLabel(
-				functionInfo.function->name.str(),
-				functionInfo.function->arguments.size(),
-				functionInfo.function->returns.size(),
+				functionInfo.function.name.str(),
+				functionInfo.function.arguments.size(),
+				functionInfo.function.returns.size(),
 				{}
 			) : m_assembly.newLabelId();
 
@@ -138,7 +138,7 @@ void CodeGenerator::operator()(DFG::FunctionInfo const& _functionInfo)
 	BlockGenerationInfo const& info = m_info.blockInfos.at(_functionInfo.entry);
 
 	DEBUG(cout << std::endl;)
-	DEBUG(cout << "F: start of function " << _functionInfo.function->name.str() << std::endl;)
+	DEBUG(cout << "F: start of function " << _functionInfo.function.name.str() << std::endl;)
 	m_stack.clear();
 	m_stack.emplace_back(FunctionReturnLabelSlot{});
 	for (auto const& param: _functionInfo.parameters | ranges::views::reverse)
@@ -164,7 +164,7 @@ void CodeGenerator::validateSlot(StackSlot const& _slot, Expression const& _expr
 		},
 		[&](yul::Identifier const& _identifier) {
 			auto* variableSlot = get_if<VariableSlot>(&_slot);
-			yulAssert(variableSlot && variableSlot->variable->name == _identifier.name, "");
+			yulAssert(variableSlot && variableSlot->variable.get().name == _identifier.name, "");
 		},
 		[&](yul::FunctionCall const& _call) {
 			auto* temporarySlot = get_if<TemporarySlot>(&_slot);
@@ -177,46 +177,46 @@ void CodeGenerator::operator()(DFG::FunctionCall const& _call)
 {
 	// Assert that we got a correct stack for the call.
 	for (auto&& [arg, slot]: ranges::zip_view(
-		_call.functionCall->arguments | ranges::views::reverse,
-		m_stack | ranges::views::take_last(_call.functionCall->arguments.size())
+		_call.functionCall.get().arguments | ranges::views::reverse,
+		m_stack | ranges::views::take_last(_call.functionCall.get().arguments.size())
 	))
 		validateSlot(slot, arg);
 
-	auto entryLabel = getFunctionLabel(*_call.function);
-	DEBUG(cout << "F: function call " << _call.functionCall->functionName.name.str() << " pre: " << stackToString(m_stack) << std::endl;)
+	auto entryLabel = getFunctionLabel(_call.function);
+	DEBUG(cout << "F: function call " << _call.functionCall.get().functionName.name.str() << " pre: " << stackToString(m_stack) << std::endl;)
 	m_assembly.setSourceLocation(locationOf(_call));
 	m_assembly.appendJumpTo(
 		entryLabel,
-		static_cast<int>(_call.function->returns.size() - _call.function->arguments.size()) - 1,
+		static_cast<int>(_call.function.get().returns.size() - _call.function.get().arguments.size()) - 1,
 		AbstractAssembly::JumpType::IntoFunction
 	);
-	m_assembly.appendLabel(m_returnLabels.at(_call.functionCall));
-	for (size_t i = 0; i < _call.function->arguments.size() + 1; ++i)
+	m_assembly.appendLabel(m_returnLabels.at(&_call.functionCall.get()));
+	for (size_t i = 0; i < _call.function.get().arguments.size() + 1; ++i)
 		m_stack.pop_back();
-	for (size_t i = 0; i < _call.function->returns.size(); ++i)
-		m_stack.emplace_back(TemporarySlot{*_call.functionCall, i});
-	DEBUG(cout << "F: function call " << _call.functionCall->functionName.name.str() << " post: " << stackToString(m_stack) << std::endl;)
+	for (size_t i = 0; i < _call.function.get().returns.size(); ++i)
+		m_stack.emplace_back(TemporarySlot{_call.functionCall, i});
+	DEBUG(cout << "F: function call " << _call.functionCall.get().functionName.name.str() << " post: " << stackToString(m_stack) << std::endl;)
 }
 
 void CodeGenerator::operator()(DFG::BuiltinCall const& _call)
 {
 	// Assert that we got a correct stack for the call.
 	for (auto&& [arg, slot]: ranges::zip_view(
-		_call.functionCall->arguments | ranges::views::enumerate |
-		ranges::views::filter(util::mapTuple([&](size_t idx, auto&) -> bool { return !_call.builtin->literalArgument(idx); })) |
+		_call.functionCall.get().arguments | ranges::views::enumerate |
+		ranges::views::filter(util::mapTuple([&](size_t idx, auto&) -> bool { return !_call.builtin.get().literalArgument(idx); })) |
 		ranges::views::reverse | ranges::views::values,
 		m_stack | ranges::views::take_last(_call.arguments)
 	))
 		validateSlot(slot, arg);
 
-	DEBUG(cout << "F: builtin call " << _call.functionCall->functionName.name.str() << " pre: " << stackToString(m_stack) << std::endl;)
+	DEBUG(cout << "F: builtin call " << _call.functionCall.get().functionName.name.str() << " pre: " << stackToString(m_stack) << std::endl;)
 	m_assembly.setSourceLocation(locationOf(_call));
-	_call.builtin->generateCode(*_call.functionCall, m_assembly, m_builtinContext, [](auto&&){});
+	_call.builtin.get().generateCode(_call.functionCall, m_assembly, m_builtinContext, [](auto&&){});
 	for (size_t i = 0; i < _call.arguments; ++i)
 		m_stack.pop_back();
-	for (size_t i = 0; i < _call.builtin->returns.size(); ++i)
-		m_stack.emplace_back(TemporarySlot{*_call.functionCall, i});
-	DEBUG(cout << "F: builtin call " << _call.functionCall->functionName.name.str() << " post: " << stackToString(m_stack) << std::endl;)
+	for (size_t i = 0; i < _call.builtin.get().returns.size(); ++i)
+		m_stack.emplace_back(TemporarySlot{_call.functionCall, i});
+	DEBUG(cout << "F: builtin call " << _call.functionCall.get().functionName.name.str() << " post: " << stackToString(m_stack) << std::endl;)
 }
 
 void CodeGenerator::operator()(DFG::Assignment const& _assignment)
@@ -224,7 +224,7 @@ void CodeGenerator::operator()(DFG::Assignment const& _assignment)
 	m_assembly.setSourceLocation(locationOf(_assignment));
 	DEBUG(cout << "F: assign (";)
 	for (auto var: _assignment.variables)
-		DEBUG(cout << var.variable->name.str() << " ";)
+		DEBUG(cout << var.variable.get().name.str() << " ";)
 	DEBUG(cout << ") pre: " << stackToString(m_stack) << std::endl;)
 
 	for (auto& currentSlot: m_stack)
@@ -237,7 +237,7 @@ void CodeGenerator::operator()(DFG::Assignment const& _assignment)
 
 	DEBUG(cout << "F: assign (";)
 	for (auto var: _assignment.variables)
-		DEBUG(cout << var.variable->name.str() << " ";)
+		DEBUG(cout << var.variable.get().name.str() << " ";)
 	DEBUG(cout << ") post: " << stackToString(m_stack) << std::endl;)
 }
 
@@ -373,7 +373,7 @@ void CodeGenerator::operator()(DFG::BasicBlock const& _block)
 		[&](DFG::BasicBlock::FunctionReturn const& _functionReturn)
 		{
 			yulAssert(m_currentFunctionInfo == _functionReturn.info, "");
-			DEBUG(cout << "F: Function return exit: " << _functionReturn.info->function->name.str() << std::endl;)
+			DEBUG(cout << "F: Function return exit: " << _functionReturn.info->function.name.str() << std::endl;)
 
 			yulAssert(m_currentFunctionInfo, "");
 			Stack exitStack = m_currentFunctionInfo->returnVariables | ranges::views::transform([](auto const& _varSlot){
@@ -381,7 +381,7 @@ void CodeGenerator::operator()(DFG::BasicBlock const& _block)
 			}) | ranges::to<Stack>;
 			exitStack.emplace_back(FunctionReturnLabelSlot{});
 
-			DEBUG(cout << "Return from function " << m_currentFunctionInfo->function->name.str() << std::endl;)
+			DEBUG(cout << "Return from function " << m_currentFunctionInfo->function.name.str() << std::endl;)
 			DEBUG(cout << "EXIT STACK: " << stackToString(exitStack) << std::endl;)
 			createStackLayout(exitStack);
 			m_assembly.setSourceLocation(locationOf(*m_currentFunctionInfo));

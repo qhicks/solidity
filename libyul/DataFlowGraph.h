@@ -43,10 +43,10 @@ struct FunctionReturnLabelSlot
 };
 struct VariableSlot
 {
-	Scope::Variable const* variable = nullptr;
+	std::reference_wrapper<Scope::Variable const> variable;
 	std::shared_ptr<DebugData const> debugData{};
-	bool operator==(VariableSlot const& _rhs) const { return variable == _rhs.variable; }
-	bool operator<(VariableSlot const& _rhs) const { return variable < _rhs.variable; }
+	bool operator==(VariableSlot const& _rhs) const { return &variable.get() == &_rhs.variable.get(); }
+	bool operator<(VariableSlot const& _rhs) const { return &variable.get() < &_rhs.variable.get(); }
 };
 struct LiteralSlot
 {
@@ -80,15 +80,15 @@ struct DFG
 	struct BuiltinCall
 	{
 		std::shared_ptr<DebugData const> debugData;
-		BuiltinFunctionForEVM const* builtin = nullptr;
-		yul::FunctionCall const* functionCall = nullptr;
+		std::reference_wrapper<BuiltinFunctionForEVM const> builtin;
+		std::reference_wrapper<yul::FunctionCall const> functionCall;
 		size_t arguments = 0;
 	};
 	struct FunctionCall
 	{
 		std::shared_ptr<DebugData const> debugData;
-		Scope::Function const* function = nullptr;
-		yul::FunctionCall const* functionCall = nullptr;
+		std::reference_wrapper<Scope::Function const> function;
+		std::reference_wrapper<yul::FunctionCall const> functionCall;
 	};
 	struct Assignment
 	{
@@ -128,7 +128,7 @@ struct DFG
 	struct FunctionInfo
 	{
 		std::shared_ptr<DebugData const> debugData;
-		Scope::Function const* function = nullptr;
+		Scope::Function const& function;
 		BasicBlock* entry = nullptr;
 		std::vector<VariableSlot> parameters;
 		std::vector<VariableSlot> returnVariables;
@@ -193,7 +193,11 @@ private:
 	EVMDialect const& m_dialect;
 	DFG::BasicBlock* m_currentBlock = nullptr;
 	Scope* m_scope = nullptr;
-	struct ForLoopInfo { DFG::BasicBlock* afterLoop = nullptr; DFG::BasicBlock* post = nullptr; };
+	struct ForLoopInfo
+	{
+		std::reference_wrapper<DFG::BasicBlock> afterLoop;
+		std::reference_wrapper<DFG::BasicBlock> post;
+	};
 	std::optional<ForLoopInfo> m_forLoopInfo;
 	DFG::BasicBlock* m_currentFunctionExit = nullptr;
 };

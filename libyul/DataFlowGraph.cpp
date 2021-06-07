@@ -112,7 +112,7 @@ StackSlot DataFlowGraphBuilder::operator()(Literal const& _literal)
 
 StackSlot DataFlowGraphBuilder::operator()(Identifier const& _identifier)
 {
-	return VariableSlot{&lookupVariable(_identifier.name), _identifier.debugData};
+	return VariableSlot{lookupVariable(_identifier.name), _identifier.debugData};
 }
 
 StackSlot DataFlowGraphBuilder::operator()(Expression const& _expression)
@@ -144,7 +144,7 @@ DFG::Operation& DataFlowGraphBuilder::visitFunctionCall(FunctionCall const& _cal
 				return TemporarySlot{_call, _i};
 			}) | ranges::to<Stack>,
 			// operation
-			DFG::BuiltinCall{_call.debugData, builtin, &_call},
+			DFG::BuiltinCall{_call.debugData, *builtin, _call},
 		});
 		std::get<DFG::BuiltinCall>(operation.operation).arguments = operation.input.size();
 		return operation;
@@ -168,7 +168,7 @@ DFG::Operation& DataFlowGraphBuilder::visitFunctionCall(FunctionCall const& _cal
 				return TemporarySlot{_call, _i};
 			}) | ranges::to<Stack>,
 			// operation
-			DFG::FunctionCall{_call.debugData, function, &_call}
+			DFG::FunctionCall{_call.debugData, *function, _call}
 		});
 		return operation;
 	}
@@ -185,7 +185,7 @@ void DataFlowGraphBuilder::operator()(VariableDeclaration const& _varDecl)
 {
 	yulAssert(m_currentBlock, "");
 	auto declaredVariables = _varDecl.variables | ranges::views::transform([&](TypedName const& _var) {
-		return VariableSlot{&lookupVariable(_var.name), _var.debugData};
+		return VariableSlot{lookupVariable(_var.name), _var.debugData};
 	}) | ranges::to<vector>;
 	Stack input;
 	if (_varDecl.value)
@@ -213,7 +213,7 @@ void DataFlowGraphBuilder::operator()(VariableDeclaration const& _varDecl)
 void DataFlowGraphBuilder::operator()(Assignment const& _assignment)
 {
 	vector<VariableSlot> assignedVariables = _assignment.variableNames | ranges::views::transform([&](Identifier const& _var) {
-		return VariableSlot{&lookupVariable(_var.name), _var.debugData};
+		return VariableSlot{lookupVariable(_var.name), _var.debugData};
 	}) | ranges::to<vector<VariableSlot>>;
 
 	yulAssert(m_currentBlock, "");
@@ -308,7 +308,7 @@ void DataFlowGraphBuilder::operator()(Switch const& _switch)
 
 	// Artifically generate:
 	// let <ghostVariable> := <switchExpression>
-	VariableSlot ghostVarSlot{&ghostVar, debugDataOf(*_switch.expression)};
+	VariableSlot ghostVarSlot{ghostVar, debugDataOf(*_switch.expression)};
 	m_currentBlock->operations.emplace_back(DFG::Operation{
 		Stack{std::visit(*this, *_switch.expression)},
 		Stack{ghostVarSlot},
@@ -329,7 +329,7 @@ void DataFlowGraphBuilder::operator()(Switch const& _switch)
 		DFG::Operation& operation = m_currentBlock->operations.emplace_back(DFG::Operation{
 			Stack{ghostVarSlot, LiteralSlot{valueOfLiteral(_value), _value.debugData}},
 			Stack{TemporarySlot{ghostCall, 0}},
-			DFG::BuiltinCall{_switch.debugData, equalityBuiltin, &ghostCall, 2},
+			DFG::BuiltinCall{_switch.debugData, *equalityBuiltin, ghostCall, 2},
 		});
 		return operation.output.front();
 	};
@@ -375,7 +375,7 @@ void DataFlowGraphBuilder::operator()(ForLoop const& _loop)
 	DFG::BasicBlock& post = m_graph.makeBlock();
 	DFG::BasicBlock& afterLoop = m_graph.makeBlock();
 
-	ScopedSaveAndRestore scopedSaveAndRestore(m_forLoopInfo, ForLoopInfo{&afterLoop, &post});
+	ScopedSaveAndRestore scopedSaveAndRestore(m_forLoopInfo, ForLoopInfo{afterLoop, post});
 
 	if (constantCondition.has_value())
 	{
@@ -407,14 +407,14 @@ void DataFlowGraphBuilder::operator()(ForLoop const& _loop)
 void DataFlowGraphBuilder::operator()(Break const&)
 {
 	yulAssert(m_forLoopInfo.has_value(), "");
-	jump(*m_forLoopInfo->afterLoop);
+	jump(m_forLoopInfo->afterLoop);
 	m_currentBlock = &m_graph.makeBlock();
 }
 
 void DataFlowGraphBuilder::operator()(Continue const&)
 {
 	yulAssert(m_forLoopInfo.has_value(), "");
-	jump(*m_forLoopInfo->post);
+	jump(m_forLoopInfo->post);
 	m_currentBlock = &m_graph.makeBlock();
 }
 
@@ -435,23 +435,25 @@ void DataFlowGraphBuilder::operator()(FunctionDefinition const& _function)
 	Scope* virtualFunctionScope = m_info.scopes.at(m_info.virtualBlocks.at(&_function).get()).get();
 	yulAssert(virtualFunctionScope, "");
 
-	DFG::FunctionInfo& info = m_graph.functions[&function] = DFG::FunctionInfo{
+	auto&& [it, inserted] = m_graph.functions.emplace(std::make_pair(&function, DFG::FunctionInfo{
 		_function.debugData,
-		&function,
+		function,
 		&m_graph.makeBlock(),
 		_function.parameters | ranges::views::transform([&](auto const& _param) {
 			return VariableSlot{
-				&std::get<Scope::Variable>(virtualFunctionScope->identifiers.at(_param.name)),
+				std::get<Scope::Variable>(virtualFunctionScope->identifiers.at(_param.name)),
 				_param.debugData
 			};
 		}) | ranges::to<vector>,
 		_function.returnVariables | ranges::views::transform([&](auto const& _retVar) {
 			return VariableSlot{
-				&std::get<Scope::Variable>(virtualFunctionScope->identifiers.at(_retVar.name)),
+				std::get<Scope::Variable>(virtualFunctionScope->identifiers.at(_retVar.name)),
 				_retVar.debugData
 			};
 		}) | ranges::to<vector>
-	};
+	}));
+	yulAssert(inserted, "");
+	DFG::FunctionInfo& info = it->second;
 
 	DataFlowGraphBuilder builder{m_graph, m_info, m_dialect};
 	builder.m_currentFunctionExit = &m_graph.makeBlock();

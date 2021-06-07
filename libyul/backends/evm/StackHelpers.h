@@ -33,7 +33,7 @@ inline std::string stackSlotToString(StackSlot const& _slot)
 	return std::visit(util::GenericVisitor{
 		[](FunctionCallReturnLabelSlot const& _ret) -> std::string { return "RET[" + _ret.call.get().functionName.name.str() + "]"; },
 		[](FunctionReturnLabelSlot const&) -> std::string { return "RET"; },
-		[](VariableSlot const& _var) { return _var.variable->name.str(); },
+		[](VariableSlot const& _var) { return _var.variable.get().name.str(); },
 		[](LiteralSlot const& _lit) { return util::toCompactHexWithPrefix(_lit.value); },
 		[](TemporarySlot const& _tmp) -> std::string { return "TMP[" + _tmp.call.get().functionName.name.str() + ", " + std::to_string(_tmp.idx) + "]"; },
 		[](JunkSlot const&) -> std::string { return "JUNK"; }
