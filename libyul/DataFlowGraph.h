@@ -77,11 +77,13 @@ struct DFG
 	DFG(DFG&&) = delete;
 	DFG& operator=(DFG const&) = delete;
 	DFG& operator=(DFG&&) = delete;
+
 	struct BuiltinCall
 	{
 		std::shared_ptr<DebugData const> debugData;
 		std::reference_wrapper<BuiltinFunctionForEVM const> builtin;
 		std::reference_wrapper<yul::FunctionCall const> functionCall;
+		/// Number of proper arguments with a position on the stack, excluding literal arguments.
 		size_t arguments = 0;
 	};
 	struct FunctionCall
@@ -93,12 +95,16 @@ struct DFG
 	struct Assignment
 	{
 		std::shared_ptr<DebugData const> debugData;
+		/// The variables being assigned to also occur as ``output`` in the ``Operation`` containing
+		/// the assignment, but are also stored here for convenience.
 		std::vector<VariableSlot> variables;
 	};
 
 	struct Operation
 	{
+		/// Stack slots this operation expects at the top of the stack and consumes.
 		Stack input;
+		/// Stack slots this operation leaves on the stack as output.
 		Stack output;
 		std::variant<FunctionCall, BuiltinCall, Assignment> operation;
 	};
@@ -118,6 +124,7 @@ struct DFG
 		struct Jump
 		{
 			BasicBlock* target = nullptr;
+			/// The only backwards jumps are jumps from loop post to loop condition.
 			bool backwards = false;
 		};
 		struct FunctionReturn { DFG::FunctionInfo* info = nullptr; };
