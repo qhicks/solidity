@@ -15,7 +15,7 @@ contract c {
 // ----
 // getLength() -> 0
 // set(): 1, 2 -> true
-// gas irOptimized: 110519
+// gas irOptimized: 110516
 // gas legacy: 110726
 // gas legacyOptimized: 110567
 // getLength() -> 68

@@ -185,8 +185,10 @@ void StackLayoutGenerator::operator()(DFG::Operation const& _operation)
 
 	DEBUG(cout << "Operation pre before compress: " << stackToString(*m_stack) << std::endl;)
 
-	// TODO: this is an improper hack and does not account for the induced shuffling.
-	cxx20::erase_if(*m_stack, [](StackSlot const& _slot) { return holds_alternative<FunctionCallReturnLabelSlot>(_slot); });
+	// TODO: We will potentially accumulate a lot of return labels here.
+	// Removing them naively has huge implications on both code size and runtime gas cost (both positive and negative):
+	//   cxx20::erase_if(*m_stack, [](StackSlot const& _slot) { return holds_alternative<FunctionCallReturnLabelSlot>(_slot); });
+	// Consider removing them properly while accounting for the induced backwards stack shuffling.
 
 	for (auto&& [idx, slot]: *m_stack | ranges::views::enumerate | ranges::views::reverse)
 		// We can always push literals, junk and function call return labels.

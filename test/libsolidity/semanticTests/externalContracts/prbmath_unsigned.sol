@@ -50,11 +50,11 @@ contract test {
 // compileViaYul: also
 // ----
 // constructor()
-// gas irOptimized: 2023374
+// gas irOptimized: 2024046
 // gas legacy: 2356230
 // gas legacyOptimized: 1770105
 // div(uint256,uint256): 3141592653589793238, 88714123 -> 35412542528203691288251815328
-// gas irOptimized: 21949
+// gas irOptimized: 21946
 // gas legacy: 22497
 // gas legacyOptimized: 22010
 // exp(uint256): 3141592653589793238 -> 23140692632779268978
@@ -66,7 +66,7 @@ contract test {
 // gas legacy: 24814
 // gas legacyOptimized: 24062
 // gm(uint256,uint256): 3141592653589793238, 88714123 -> 16694419339601
-// gas irOptimized: 22889
+// gas irOptimized: 22892
 // gas legacy: 23269
 // gas legacyOptimized: 22724
 // log10(uint256): 3141592653589793238 -> 0x44fe4fc084a52b8a
@@ -78,7 +78,7 @@ contract test {
 // gas legacy: 30986
 // gas legacyOptimized: 28001
 // mul(uint256,uint256): 3141592653589793238, 88714123 -> 278703637
-// gas irOptimized: 22028
+// gas irOptimized: 22025
 // gas legacy: 22604
 // gas legacyOptimized: 22090
 // pow(uint256,uint256): 3141592653589793238, 5 -> 306019684785281453040
@@ -86,10 +86,10 @@ contract test {
 // gas legacy: 23245
 // gas legacyOptimized: 22646
 // sqrt(uint256): 3141592653589793238 -> 1772453850905516027
-// gas irOptimized: 22594
+// gas irOptimized: 22597
 // gas legacy: 22820
 // gas legacyOptimized: 22440
 // benchmark(uint256): 3141592653589793238 -> 998882724338592125, 1000000000000000000, 1000000000000000000
-// gas irOptimized: 35503
+// gas irOptimized: 35527
 // gas legacy: 35385
 // gas legacyOptimized: 33449

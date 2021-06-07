@@ -51,26 +51,26 @@ contract test {
 // compileViaYul: also
 // ----
 // constructor()
-// gas irOptimized: 852919
+// gas irOptimized: 865268
 // gas legacy: 1188228
 // gas legacyOptimized: 771634
 // toSlice(string): 0x20, 11, "hello world" -> 11, 0xa0
-// gas irOptimized: 22628
+// gas irOptimized: 22622
 // gas legacy: 23190
 // gas legacyOptimized: 22508
 // roundtrip(string): 0x20, 11, "hello world" -> 0x20, 11, "hello world"
-// gas irOptimized: 23506
+// gas irOptimized: 23476
 // gas legacy: 23820
 // gas legacyOptimized: 23123
 // utf8len(string): 0x20, 16, "\xf0\x9f\x98\x83\xf0\x9f\x98\x83\xf0\x9f\x98\x83\xf0\x9f\x98\x83" -> 4 # Input: "😃😃😃😃" #
-// gas irOptimized: 24239
+// gas irOptimized: 24224
 // gas legacy: 25716
 // gas legacyOptimized: 24115
 // multiconcat(string,uint256): 0x40, 3, 11, "hello world" -> 0x20, 0x58, 0x68656c6c6f20776f726c6468656c6c6f20776f726c6468656c6c6f20776f726c, 0x6468656c6c6f20776f726c6468656c6c6f20776f726c6468656c6c6f20776f72, 49027192869463622675296414541903001712009715982962058146354235762728281047040 # concatenating 3 times #
-// gas irOptimized: 28808
+// gas irOptimized: 28823
 // gas legacy: 31621
 // gas legacyOptimized: 27914
 // benchmark(string,bytes32): 0x40, 0x0842021, 8, "solidity" -> 0x2020
-// gas irOptimized: 1872927
+// gas irOptimized: 1872952
 // gas legacy: 4381235
 // gas legacyOptimized: 2317529
