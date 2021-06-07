@@ -150,8 +150,11 @@ struct DFG
 class DataFlowGraphBuilder
 {
 public:
+	DataFlowGraphBuilder(DataFlowGraphBuilder const&) = delete;
+	DataFlowGraphBuilder& operator=(DataFlowGraphBuilder const&) = delete;
 	static std::unique_ptr<DFG> build(AsmAnalysisInfo& _analysisInfo, EVMDialect const& _dialect, Block const& _block);
 
+	StackSlot operator()(Expression const& _literal);
 	StackSlot operator()(Literal const& _literal);
 	StackSlot operator()(Identifier const& _identifier);
 	StackSlot operator()(FunctionCall const&);

@@ -21,24 +21,35 @@
 #include <libyul/AsmPrinter.h>
 
 #include <libsolutil/cxx20.h>
-#include <libsolutil/Permutations.h>
 #include <libsolutil/Visitor.h>
 #include <libsolutil/Algorithms.h>
 
 #include <range/v3/range/conversion.hpp>
-#include <range/v3/view/enumerate.hpp>
+#include <range/v3/view/concat.hpp>
 #include <range/v3/view/drop_last.hpp>
+#include <range/v3/view/enumerate.hpp>
 #include <range/v3/view/filter.hpp>
 #include <range/v3/view/iota.hpp>
 #include <range/v3/view/map.hpp>
 #include <range/v3/view/reverse.hpp>
+#include <range/v3/view/single.hpp>
 #include <range/v3/view/take_last.hpp>
 #include <range/v3/view/transform.hpp>
-#include <boost/algorithm/string/join.hpp>
 
 using namespace solidity;
 using namespace solidity::yul;
 using namespace std;
+
+// TODO: if this is generally useful, promote to libsolutil - otherwise, remove and inline the ranges::views::transform.
+template<auto>
+struct MemberTransform;
+template<typename T, typename C, T C::*ptr>
+struct MemberTransform<ptr>
+{
+	static constexpr auto transform = ranges::views::transform([](auto&& _c) { return _c.*ptr; });
+};
+template<auto ptr>
+static constexpr auto member_view = MemberTransform<ptr>::transform;
 
 std::unique_ptr<DFG> DataFlowGraphBuilder::build(
 	AsmAnalysisInfo& _analysisInfo,
@@ -53,10 +64,11 @@ std::unique_ptr<DFG> DataFlowGraphBuilder::build(
 	builder.m_currentBlock = result->entry;
 	builder(_block);
 
-	util::BreadthFirstSearch<DFG::BasicBlock*> reachabilityCheck{{result->entry}};
-	for (auto const& functionInfo: result->functions | ranges::views::values)
-		reachabilityCheck.verticesToTraverse.emplace_back(functionInfo.entry);
-
+	// Determine which blocks are reachable from the entry.
+	util::BreadthFirstSearch<DFG::BasicBlock*> reachabilityCheck{ranges::views::concat(
+		ranges::views::single(result->entry),
+		result->functions | ranges::views::values | member_view<&DFG::FunctionInfo::entry>
+	) | ranges::to<list>};
 	reachabilityCheck.run([&](DFG::BasicBlock* _node, auto&& _addChild) {
 		visit(util::GenericVisitor{
 			[&](DFG::BasicBlock::Jump& _jump) {
@@ -72,9 +84,11 @@ std::unique_ptr<DFG> DataFlowGraphBuilder::build(
 		}, _node->exit);
 	});
 
+	// Remove all entries from unreachable nodes from the graph.
 	for (auto* node: reachabilityCheck.visited)
 		cxx20::erase_if(node->entries, [&](DFG::BasicBlock const* entry) -> bool {
-			return !reachabilityCheck.visited.count(const_cast<DFG::BasicBlock*>(entry)); // TODO
+			// TODO: the const_cast is harmless, but weird.
+			return !reachabilityCheck.visited.count(const_cast<DFG::BasicBlock*>(entry));
 		});
 
 	return result;
@@ -101,6 +115,12 @@ StackSlot DataFlowGraphBuilder::operator()(Identifier const& _identifier)
 	return VariableSlot{&lookupVariable(_identifier.name), _identifier.debugData};
 }
 
+StackSlot DataFlowGraphBuilder::operator()(Expression const& _expression)
+{
+	return std::visit(*this, _expression);
+}
+
+
 DFG::Operation& DataFlowGraphBuilder::visitFunctionCall(FunctionCall const& _call)
 {
 	yulAssert(m_scope, "");
@@ -109,21 +129,24 @@ DFG::Operation& DataFlowGraphBuilder::visitFunctionCall(FunctionCall const& _cal
 	if (BuiltinFunctionForEVM const* builtin = m_dialect.builtin(_call.functionName.name))
 	{
 		DFG::Operation& operation = m_currentBlock->operations.emplace_back(DFG::Operation{
+			// input
 			_call.arguments |
 			ranges::views::enumerate |
 			ranges::views::reverse |
 			ranges::views::filter(util::mapTuple([&](size_t idx, auto const&) {
 				return !builtin->literalArgument(idx).has_value();
 			})) |
-			ranges::views::transform(util::mapTuple([&](size_t, Expression const& _expression) {
-				return std::visit(*this, _expression);
-			})) | ranges::to<Stack>,
-			{},
+			ranges::views::values |
+			ranges::views::transform(std::ref(*this)) |
+			ranges::to<Stack>,
+			// output
+			ranges::views::iota(0u, builtin->returns.size()) | ranges::views::transform([&](size_t _i) {
+				return TemporarySlot{&_call, _i};
+			}) | ranges::to<Stack>,
+			// operation
 			DFG::BuiltinCall{_call.debugData, builtin, &_call},
 		});
 		std::get<DFG::BuiltinCall>(operation.operation).arguments = operation.input.size();
-		for (size_t i: ranges::views::iota(0u, builtin->returns.size()))
-			operation.output.emplace_back(TemporarySlot{&_call, i});
 		return operation;
 	}
 	else
@@ -134,17 +157,19 @@ DFG::Operation& DataFlowGraphBuilder::visitFunctionCall(FunctionCall const& _cal
 			[&](Scope::Function& _function) { function = &_function; }
 		}), "Function name not found.");
 		yulAssert(function, "");
-		Stack inputs;
-		inputs.emplace_back(ReturnLabelSlot{&_call});
-		for (Expression const& _expression: _call.arguments | ranges::views::reverse)
-			inputs.emplace_back(std::visit(*this, _expression));
 		DFG::Operation& operation = m_currentBlock->operations.emplace_back(DFG::Operation{
-			inputs,
-			{},
+			// input
+			ranges::views::concat(
+				ranges::views::single(ReturnLabelSlot{&_call}),
+				_call.arguments | ranges::views::reverse | ranges::views::transform(std::ref(*this))
+			) | ranges::to<Stack>,
+			// output
+			ranges::views::iota(0u, function->returns.size()) | ranges::views::transform([&](size_t _i) {
+				return TemporarySlot{&_call, _i};
+			}) | ranges::to<Stack>,
+			// operation
 			DFG::FunctionCall{_call.debugData, function, &_call}
 		});
-		for (size_t i: ranges::views::iota(0u, function->returns.size()))
-			operation.output.emplace_back(TemporarySlot{&_call, i});
 		return operation;
 	}
 }
@@ -159,66 +184,57 @@ StackSlot DataFlowGraphBuilder::operator()(FunctionCall const& _call)
 void DataFlowGraphBuilder::operator()(VariableDeclaration const& _varDecl)
 {
 	yulAssert(m_currentBlock, "");
-	std::vector<VariableSlot> variables = _varDecl.variables | ranges::views::transform([&](TypedName const& _var) {
+	auto declaredVariables = _varDecl.variables | ranges::views::transform([&](TypedName const& _var) {
 		return VariableSlot{&lookupVariable(_var.name), _var.debugData};
-	}) | ranges::to<vector<VariableSlot>>;
+	}) | ranges::to<vector>;
+	Stack input;
 	if (_varDecl.value)
-		std::visit(util::GenericVisitor{
-			[&](FunctionCall const& _call) {
+		input = std::visit(util::GenericVisitor{
+			[&](FunctionCall const& _call) -> Stack {
 				DFG::Operation& operation = visitFunctionCall(_call);
-				yulAssert(variables.size() == operation.output.size(), "");
-				m_currentBlock->operations.emplace_back(DFG::Operation{
-					operation.output,
-					variables | ranges::to<Stack>,
-					DFG::Assignment{_varDecl.debugData, variables}
-				});
+				yulAssert(declaredVariables.size() == operation.output.size(), "");
+				return operation.output;
 			},
-			[&](auto const& _identifierOrLiteral) {
-				yulAssert(variables.size() == 1, "");
-				m_currentBlock->operations.emplace_back(DFG::Operation{
-					{(*this)(_identifierOrLiteral)},
-					variables | ranges::to<Stack>,
-					DFG::Assignment{_varDecl.debugData, variables}
-				});
-			},
+			[&](auto const& _identifierOrLiteral) -> Stack{
+				yulAssert(declaredVariables.size() == 1, "");
+				return {(*this)(_identifierOrLiteral)};
+			}
 		}, *_varDecl.value);
 	else
-	{
-
-		m_currentBlock->operations.emplace_back(DFG::Operation{
-			ranges::views::iota(0u, _varDecl.variables.size()) | ranges::views::transform([&](size_t) {
-				return LiteralSlot{0, _varDecl.debugData};
-			}) | ranges::to<Stack>,
-			variables | ranges::to<Stack>,
-			DFG::Assignment{_varDecl.debugData, variables}
-		});
-	}
+		input = ranges::views::iota(0u, _varDecl.variables.size()) | ranges::views::transform([&](size_t) {
+			return LiteralSlot{0, _varDecl.debugData};
+		}) | ranges::to<Stack>;
+	m_currentBlock->operations.emplace_back(DFG::Operation{
+		std::move(input),
+		declaredVariables | ranges::to<Stack>,
+		DFG::Assignment{_varDecl.debugData, declaredVariables}
+	});
 }
 void DataFlowGraphBuilder::operator()(Assignment const& _assignment)
 {
-	yulAssert(m_currentBlock, "");
-	vector<VariableSlot> variables = _assignment.variableNames | ranges::views::transform([&](Identifier const& _var) {
+	vector<VariableSlot> assignedVariables = _assignment.variableNames | ranges::views::transform([&](Identifier const& _var) {
 		return VariableSlot{&lookupVariable(_var.name), _var.debugData};
 	}) | ranges::to<vector<VariableSlot>>;
-	std::visit(util::GenericVisitor{
-		[&](FunctionCall const& _call) {
-			DFG::Operation& operation = visitFunctionCall(_call);
-			yulAssert(variables.size() == operation.output.size(), "");
-			m_currentBlock->operations.emplace_back(DFG::Operation{
-				operation.output,
-				variables | ranges::to<Stack>,
-				DFG::Assignment{_assignment.debugData, variables}
-			});
-		},
-		[&](auto const& _identifierOrLiteral) {
-			yulAssert(variables.size() == 1, "");
-			m_currentBlock->operations.emplace_back(DFG::Operation{
-				{(*this)(_identifierOrLiteral)},
-				variables | ranges::to<Stack>,
-				DFG::Assignment{_assignment.debugData, variables}
-			});
-		},
-	}, *_assignment.value);
+
+	yulAssert(m_currentBlock, "");
+	m_currentBlock->operations.emplace_back(DFG::Operation{
+		// input
+		std::visit(util::GenericVisitor{
+			[&](FunctionCall const& _call) -> Stack {
+				DFG::Operation& operation = visitFunctionCall(_call);
+				yulAssert(assignedVariables.size() == operation.output.size(), "");
+				return operation.output;
+			},
+			[&](auto const& _identifierOrLiteral) -> Stack {
+				yulAssert(assignedVariables.size() == 1, "");
+				return {(*this)(_identifierOrLiteral)};
+			}
+		}, *_assignment.value),
+		// output
+		assignedVariables | ranges::to<Stack>,
+		// operation
+		DFG::Assignment{_assignment.debugData, assignedVariables}
+	});
 }
 void DataFlowGraphBuilder::operator()(ExpressionStatement const& _exprStmt)
 {
@@ -231,6 +247,8 @@ void DataFlowGraphBuilder::operator()(ExpressionStatement const& _exprStmt)
 		[&](auto const&) { yulAssert(false, ""); }
 	}, _exprStmt.expression);
 
+	// TODO: Ideally this would be done on the expression label and for all functions that always revert,
+	//       not only for builtins.
 	if (auto const* funCall = get_if<FunctionCall>(&_exprStmt.expression))
 		if (BuiltinFunctionForEVM const* builtin = m_dialect.builtin(funCall->functionName.name))
 			if (builtin->controlFlowSideEffects.terminates)
@@ -285,32 +303,34 @@ void DataFlowGraphBuilder::operator()(Switch const& _switch)
 {
 	yulAssert(m_currentBlock, "");
 	auto ghostVariableId = m_graph.ghostVariables.size();
-	Scope::Variable& ghostVar = m_graph.ghostVariables.emplace_back(Scope::Variable{""_yulstring, YulString("GHOST[" + to_string(ghostVariableId) + "]")});
+	YulString ghostVariableName("GHOST[" + to_string(ghostVariableId) + "]");
+	auto& ghostVar = m_graph.ghostVariables.emplace_back(Scope::Variable{""_yulstring, ghostVariableName});
 
+	// Artifically generate:
+	// let <ghostVariable> := <switchExpression>
+	VariableSlot ghostVarSlot{&ghostVar, debugDataOf(*_switch.expression)};
 	m_currentBlock->operations.emplace_back(DFG::Operation{
 		Stack{std::visit(*this, *_switch.expression)},
-		Stack{VariableSlot{&ghostVar}},
-		DFG::Assignment{_switch.debugData, {VariableSlot{&ghostVar}}}
+		Stack{ghostVarSlot},
+		DFG::Assignment{_switch.debugData, {ghostVarSlot}}
 	});
 
+	BuiltinFunctionForEVM const* equalityBuiltin = m_dialect.equalityFunction({});
+	yulAssert(equalityBuiltin, "");
+
+	// Artificially generate:
+	// eq(<literal>, <ghostVariable>)
 	auto makeValueCompare = [&](Literal const& _value) {
-
-		// TODO: debug data
 		yul::FunctionCall const& ghostCall = m_graph.ghostCalls.emplace_back(yul::FunctionCall{
-			{},
+			_value.debugData,
 			yul::Identifier{{}, "eq"_yulstring},
-			{_value, Identifier{{}, YulString("GHOST[" + to_string(ghostVariableId) + "]")}}
+			{_value, Identifier{{}, ghostVariableName}}
 		});
-
-		BuiltinFunctionForEVM const* builtin = m_dialect.equalityFunction({});
-		yulAssert(builtin, "");
-
 		DFG::Operation& operation = m_currentBlock->operations.emplace_back(DFG::Operation{
-			Stack{VariableSlot{&ghostVar}, LiteralSlot{valueOfLiteral(_value), {}}},
+			Stack{ghostVarSlot, LiteralSlot{valueOfLiteral(_value), _value.debugData}},
 			Stack{TemporarySlot{&ghostCall, 0}},
-			DFG::BuiltinCall{_switch.debugData, builtin, &ghostCall, 2},
+			DFG::BuiltinCall{_switch.debugData, equalityBuiltin, &ghostCall, 2},
 		});
-
 		return operation.output.front();
 	};
 	DFG::BasicBlock& afterSwitch = m_graph.makeBlock();
@@ -368,9 +388,7 @@ void DataFlowGraphBuilder::operator()(ForLoop const& _loop)
 			jump(loopBody, true);
 		}
 		else
-		{
 			jump(afterLoop);
-		}
 	}
 	else
 	{
@@ -400,7 +418,6 @@ void DataFlowGraphBuilder::operator()(Continue const&)
 	m_currentBlock = &m_graph.makeBlock();
 }
 
-
 void DataFlowGraphBuilder::operator()(Leave const&)
 {
 	yulAssert(m_currentFunctionExit, "");
@@ -414,27 +431,27 @@ void DataFlowGraphBuilder::operator()(FunctionDefinition const& _function)
 	yulAssert(m_scope->identifiers.count(_function.name), "");
 	Scope::Function& function = std::get<Scope::Function>(m_scope->identifiers.at(_function.name));
 
+	yulAssert(m_info.scopes.at(&_function.body), "");
+	Scope* virtualFunctionScope = m_info.scopes.at(m_info.virtualBlocks.at(&_function).get()).get();
+	yulAssert(virtualFunctionScope, "");
+
 	DFG::FunctionInfo& info = m_graph.functions[&function] = DFG::FunctionInfo{
 		_function.debugData,
 		&function,
 		&m_graph.makeBlock(),
-		{},
-		{}
+		_function.parameters | ranges::views::transform([&](auto const& _param) {
+			return VariableSlot{
+				&std::get<Scope::Variable>(virtualFunctionScope->identifiers.at(_param.name)),
+				_param.debugData
+			};
+		}) | ranges::to<vector>,
+		_function.returnVariables | ranges::views::transform([&](auto const& _retVar) {
+			return VariableSlot{
+				&std::get<Scope::Variable>(virtualFunctionScope->identifiers.at(_retVar.name)),
+				_retVar.debugData
+			};
+		}) | ranges::to<vector>
 	};
-
-	yulAssert(m_info.scopes.at(&_function.body), "");
-	Scope* virtualFunctionScope = m_info.scopes.at(m_info.virtualBlocks.at(&_function).get()).get();
-	yulAssert(virtualFunctionScope, "");
-	for (auto const& v: _function.parameters)
-		info.parameters.emplace_back(VariableSlot{
-			&std::get<Scope::Variable>(virtualFunctionScope->identifiers.at(v.name)),
-			v.debugData
-		});
-	for (auto const& v: _function.returnVariables)
-		info.returnVariables.emplace_back(VariableSlot{
-			&std::get<Scope::Variable>(virtualFunctionScope->identifiers.at(v.name)),
-			v.debugData
-		});
 
 	DataFlowGraphBuilder builder{m_graph, m_info, m_dialect};
 	builder.m_currentFunctionExit = &m_graph.makeBlock();
@@ -449,10 +466,7 @@ Scope::Variable const& DataFlowGraphBuilder::lookupVariable(YulString _name) con
 	yulAssert(m_scope, "");
 	Scope::Variable *var = nullptr;
 	if (m_scope->lookup(_name, util::GenericVisitor{
-		[&](Scope::Variable& _var)
-		{
-			var = &_var;
-		},
+		[&](Scope::Variable& _var) { var = &_var; },
 		[](Scope::Function&)
 		{
 			yulAssert(false, "Function not removed during desugaring.");
@@ -463,5 +477,4 @@ Scope::Variable const& DataFlowGraphBuilder::lookupVariable(YulString _name) con
 		return *var;
 	};
 	yulAssert(false, "External identifier access unimplemented.");
-
 }
