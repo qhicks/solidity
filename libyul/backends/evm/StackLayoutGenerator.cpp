@@ -28,7 +28,7 @@
 #include <libsolutil/Permutations.h>
 #include <libsolutil/Visitor.h>
 
-#include <range/v3/to_container.hpp>
+#include <range/v3/range/conversion.hpp>
 #include <range/v3/view/drop.hpp>
 #include <range/v3/view/drop_last.hpp>
 #include <range/v3/view/map.hpp>

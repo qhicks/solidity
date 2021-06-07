@@ -200,7 +200,7 @@ void createStackLayout(Stack& _currentStack, Stack const& _targetStack, Swap _sw
 				if (!_silent)
 					std::cout << "PUSH" << std::endl;
 				_push(slot);
-				_currentStack.template emplace_back(slot);
+				_currentStack.emplace_back(slot);
 				createStackLayout(_currentStack, _targetStack, _swap, _dup, _push, _pop, _silent);
 				return;
 			}
