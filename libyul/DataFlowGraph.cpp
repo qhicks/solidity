@@ -73,14 +73,9 @@ std::unique_ptr<DFG> DataFlowGraphBuilder::build(
 	});
 
 	for (auto* node: reachabilityCheck.visited)
-	{
 		cxx20::erase_if(node->entries, [&](DFG::BasicBlock const* entry) -> bool {
 			return !reachabilityCheck.visited.count(const_cast<DFG::BasicBlock*>(entry)); // TODO
 		});
-		cxx20::erase_if(node->backwardEntries, [&](DFG::BasicBlock const* entry) -> bool {
-			return !reachabilityCheck.visited.count(const_cast<DFG::BasicBlock*>(entry)); // TODO
-		});
-	}
 
 	return result;
 }
@@ -276,8 +271,6 @@ void DataFlowGraphBuilder::jump(DFG::BasicBlock& _target, bool backwards)
 	yulAssert(m_currentBlock, "");
 	m_currentBlock->exit = DFG::BasicBlock::Jump{&_target, backwards};
 	_target.entries.emplace_back(m_currentBlock);
-	if (backwards)
-		_target.backwardEntries.emplace_back(&_target);
 	m_currentBlock = &_target;
 }
 void DataFlowGraphBuilder::operator()(If const& _if)
@@ -426,7 +419,6 @@ void DataFlowGraphBuilder::operator()(FunctionDefinition const& _function)
 		&function,
 		&m_graph.makeBlock(),
 		{},
-		{},
 		{}
 	};
 
@@ -450,8 +442,6 @@ void DataFlowGraphBuilder::operator()(FunctionDefinition const& _function)
 	builder.m_currentBlock = info.entry;
 	builder(_function.body);
 	builder.jump(*builder.m_currentFunctionExit);
-	info.exits = builder.m_exits;
-	info.exits.insert(builder.m_currentFunctionExit);
 }
 
 Scope::Variable const& DataFlowGraphBuilder::lookupVariable(YulString _name) const

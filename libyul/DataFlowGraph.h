@@ -104,7 +104,6 @@ struct DFG
 	struct BasicBlock
 	{
 		std::vector<BasicBlock const*> entries;
-		std::vector<BasicBlock const*> backwardEntries;
 		std::vector<Operation> operations;
 		struct MainExit {};
 		struct ConditionalJump
@@ -122,21 +121,25 @@ struct DFG
 		struct Terminated {};
 		std::variant<MainExit, Jump, ConditionalJump, FunctionReturn, Terminated> exit = MainExit{};
 	};
-	std::list<BasicBlock> blocks;
-	std::list<Scope::Variable> ghostVariables;
-	std::list<yul::FunctionCall> ghostCalls;
 
 	struct FunctionInfo
 	{
 		std::shared_ptr<DebugData const> debugData;
 		Scope::Function const* function = nullptr;
 		BasicBlock* entry = nullptr;
-		std::set<BasicBlock*> exits;
 		std::vector<VariableSlot> parameters;
 		std::vector<VariableSlot> returnVariables;
 	};
-	std::map<Scope::Function const*, FunctionInfo> functions;
+
 	BasicBlock* entry = nullptr;
+	std::map<Scope::Function const*, FunctionInfo> functions;
+
+	/// Container for blocks for explicit ownership.
+	std::list<BasicBlock> blocks;
+	/// Container for creates variables for explicit ownership.
+	std::list<Scope::Variable> ghostVariables;
+	/// Container for creates calls for explicit ownership.
+	std::list<yul::FunctionCall> ghostCalls;
 
 	BasicBlock& makeBlock()
 	{
@@ -184,7 +187,6 @@ private:
 	EVMDialect const& m_dialect;
 	DFG::BasicBlock* m_currentBlock = nullptr;
 	Scope* m_scope = nullptr;
-	std::set<DFG::BasicBlock*> m_exits;
 	struct ForLoopInfo { DFG::BasicBlock* afterLoop = nullptr; DFG::BasicBlock* post = nullptr; };
 	std::optional<ForLoopInfo> m_forLoopInfo;
 	DFG::BasicBlock* m_currentFunctionExit = nullptr;
