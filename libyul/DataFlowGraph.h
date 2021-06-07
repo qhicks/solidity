@@ -25,7 +25,6 @@
 #include <libyul/optimiser/ASTWalker.h>
 #include <libyul/Scope.h>
 
-#include <deque>
 #include <vector>
 
 namespace solidity::yul
@@ -66,7 +65,7 @@ struct JunkSlot
 	bool operator<(JunkSlot const&) const { return false; }
 };
 using StackSlot = std::variant<ReturnLabelSlot, VariableSlot, LiteralSlot, TemporarySlot, JunkSlot>;
-using Stack = std::deque<StackSlot>;
+using Stack = std::vector<StackSlot>;
 
 struct DFG
 {
