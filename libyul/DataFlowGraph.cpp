@@ -68,7 +68,7 @@ std::unique_ptr<DFG> DataFlowGraphBuilder::build(
 			},
 			[](DFG::BasicBlock::FunctionReturn&) {},
 			[](DFG::BasicBlock::Terminated&) {},
-			[](std::monostate) {}
+			[](DFG::BasicBlock::MainExit&) {}
 		}, _node->exit);
 	});
 

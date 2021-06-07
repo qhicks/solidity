@@ -106,6 +106,7 @@ struct DFG
 		std::vector<BasicBlock const*> entries;
 		std::vector<BasicBlock const*> backwardEntries;
 		std::vector<Operation> operations;
+		struct MainExit {};
 		struct ConditionalJump
 		{
 			StackSlot condition;
@@ -119,7 +120,7 @@ struct DFG
 		};
 		struct FunctionReturn { DFG::FunctionInfo* info = nullptr; };
 		struct Terminated {};
-		std::variant<std::monostate, Jump, ConditionalJump, FunctionReturn, Terminated> exit;
+		std::variant<MainExit, Jump, ConditionalJump, FunctionReturn, Terminated> exit = MainExit{};
 	};
 	std::list<BasicBlock> blocks;
 	std::list<Scope::Variable> ghostVariables;

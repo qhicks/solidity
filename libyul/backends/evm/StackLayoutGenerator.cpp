@@ -267,7 +267,7 @@ Stack StackLayoutGenerator::operator()(DFG::BasicBlock const& _block, Stack _ini
 	DEBUG(cout << "Block: " << &_block << std::endl;)
 
 	std::visit(util::GenericVisitor{
-		[&](std::monostate)
+		[&](DFG::BasicBlock::MainExit const&)
 		{
 			currentStack.clear();
 		},
@@ -475,7 +475,7 @@ void StackLayoutGenerator::stitchTogether(DFG::BasicBlock& _block, std::set<DFG:
 	_visited.insert(&_block);
 	auto& info = m_context.blockInfos.at(&_block);
 	std::visit(util::GenericVisitor{
-		[&](std::monostate)
+		[&](DFG::BasicBlock::MainExit const&)
 		{
 		},
 		[&](DFG::BasicBlock::Jump const& _jump)

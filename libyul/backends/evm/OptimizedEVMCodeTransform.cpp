@@ -280,7 +280,7 @@ void CodeGenerator::operator()(DFG::BasicBlock const& _block)
 
 
 	std::visit(util::GenericVisitor{
-		[&](std::monostate)
+		[&](DFG::BasicBlock::MainExit const&)
 		{
 			DEBUG(cout << "F: MAIN EXIT" << std::endl;)
 			m_assembly.appendInstruction(evmasm::Instruction::STOP);
