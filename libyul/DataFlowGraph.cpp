@@ -141,7 +141,7 @@ DFG::Operation& DataFlowGraphBuilder::visitFunctionCall(FunctionCall const& _cal
 			ranges::to<Stack>,
 			// output
 			ranges::views::iota(0u, builtin->returns.size()) | ranges::views::transform([&](size_t _i) {
-				return TemporarySlot{&_call, _i};
+				return TemporarySlot{_call, _i};
 			}) | ranges::to<Stack>,
 			// operation
 			DFG::BuiltinCall{_call.debugData, builtin, &_call},
@@ -160,12 +160,12 @@ DFG::Operation& DataFlowGraphBuilder::visitFunctionCall(FunctionCall const& _cal
 		DFG::Operation& operation = m_currentBlock->operations.emplace_back(DFG::Operation{
 			// input
 			ranges::views::concat(
-				ranges::views::single(ReturnLabelSlot{&_call}),
+				ranges::views::single(FunctionCallReturnLabelSlot{_call}),
 				_call.arguments | ranges::views::reverse | ranges::views::transform(std::ref(*this))
 			) | ranges::to<Stack>,
 			// output
 			ranges::views::iota(0u, function->returns.size()) | ranges::views::transform([&](size_t _i) {
-				return TemporarySlot{&_call, _i};
+				return TemporarySlot{_call, _i};
 			}) | ranges::to<Stack>,
 			// operation
 			DFG::FunctionCall{_call.debugData, function, &_call}
@@ -328,7 +328,7 @@ void DataFlowGraphBuilder::operator()(Switch const& _switch)
 		});
 		DFG::Operation& operation = m_currentBlock->operations.emplace_back(DFG::Operation{
 			Stack{ghostVarSlot, LiteralSlot{valueOfLiteral(_value), _value.debugData}},
-			Stack{TemporarySlot{&ghostCall, 0}},
+			Stack{TemporarySlot{ghostCall, 0}},
 			DFG::BuiltinCall{_switch.debugData, equalityBuiltin, &ghostCall, 2},
 		});
 		return operation.output.front();

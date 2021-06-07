@@ -52,6 +52,21 @@ template <class T, class U> std::vector<T>& operator+=(std::vector<T>& _a, U&& _
 	std::move(_b.begin(), _b.end(), std::back_inserter(_a));
 	return _a;
 }
+
+/// Concatenate the contents of a container onto a list
+template <class T, class U> std::list<T>& operator+=(std::list<T>& _a, U& _b)
+{
+	for (auto const& i: _b)
+		_a.push_back(T(i));
+	return _a;
+}
+/// Concatenate the contents of a container onto a list, move variant.
+template <class T, class U> std::list<T>& operator+=(std::list<T>& _a, U&& _b)
+{
+	std::move(_b.begin(), _b.end(), std::back_inserter(_a));
+	return _a;
+}
+
 /// Concatenate the contents of a container onto a multiset
 template <class U, class... T> std::multiset<T...>& operator+=(std::multiset<T...>& _a, U& _b)
 {

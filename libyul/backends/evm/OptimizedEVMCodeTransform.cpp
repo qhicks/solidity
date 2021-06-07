@@ -140,7 +140,7 @@ void CodeGenerator::operator()(DFG::FunctionInfo const& _functionInfo)
 	DEBUG(cout << std::endl;)
 	DEBUG(cout << "F: start of function " << _functionInfo.function->name.str() << std::endl;)
 	m_stack.clear();
-	m_stack.emplace_back(ReturnLabelSlot{});
+	m_stack.emplace_back(FunctionReturnLabelSlot{});
 	for (auto const& param: _functionInfo.parameters | ranges::views::reverse)
 		m_stack.emplace_back(param);
 	m_assembly.setStackHeight(static_cast<int>(m_stack.size()));
@@ -168,7 +168,7 @@ void CodeGenerator::validateSlot(StackSlot const& _slot, Expression const& _expr
 		},
 		[&](yul::FunctionCall const& _call) {
 			auto* temporarySlot = get_if<TemporarySlot>(&_slot);
-			yulAssert(temporarySlot && temporarySlot->call == &_call, "");
+			yulAssert(temporarySlot && &temporarySlot->call.get() == &_call, "");
 		}
 	}, _expression);
 }
@@ -194,7 +194,7 @@ void CodeGenerator::operator()(DFG::FunctionCall const& _call)
 	for (size_t i = 0; i < _call.function->arguments.size() + 1; ++i)
 		m_stack.pop_back();
 	for (size_t i = 0; i < _call.function->returns.size(); ++i)
-		m_stack.emplace_back(TemporarySlot{_call.functionCall, i});
+		m_stack.emplace_back(TemporarySlot{*_call.functionCall, i});
 	DEBUG(cout << "F: function call " << _call.functionCall->functionName.name.str() << " post: " << stackToString(m_stack) << std::endl;)
 }
 
@@ -215,7 +215,7 @@ void CodeGenerator::operator()(DFG::BuiltinCall const& _call)
 	for (size_t i = 0; i < _call.arguments; ++i)
 		m_stack.pop_back();
 	for (size_t i = 0; i < _call.builtin->returns.size(); ++i)
-		m_stack.emplace_back(TemporarySlot{_call.functionCall, i});
+		m_stack.emplace_back(TemporarySlot{*_call.functionCall, i});
 	DEBUG(cout << "F: builtin call " << _call.functionCall->functionName.name.str() << " post: " << stackToString(m_stack) << std::endl;)
 }
 
@@ -379,7 +379,7 @@ void CodeGenerator::operator()(DFG::BasicBlock const& _block)
 			Stack exitStack = m_currentFunctionInfo->returnVariables | ranges::views::transform([](auto const& _varSlot){
 				return StackSlot{_varSlot};
 			}) | ranges::to<Stack>;
-			exitStack.emplace_back(ReturnLabelSlot{});
+			exitStack.emplace_back(FunctionReturnLabelSlot{});
 
 			DEBUG(cout << "Return from function " << m_currentFunctionInfo->function->name.str() << std::endl;)
 			DEBUG(cout << "EXIT STACK: " << stackToString(exitStack) << std::endl;)
@@ -433,12 +433,7 @@ void CodeGenerator::compressStack()
 {
 	DEBUG(std::cout << "COMPRESS STACK" << std::endl;)
 	static constexpr auto canBeRegenerated = [](StackSlot const& _slot) -> bool {
-		if (auto* returnSlot = get_if<ReturnLabelSlot>(&_slot))
-			if (returnSlot->call)
-				return true;
-		if (holds_alternative<LiteralSlot>(_slot))
-			return true;
-		return false;
+		return holds_alternative<LiteralSlot>(_slot) || holds_alternative<FunctionCallReturnLabelSlot>(_slot);
 	};
 	while (!m_stack.empty())
 	{
@@ -541,13 +536,15 @@ void CodeGenerator::createStackLayout(Stack _targetStack)
 				m_assembly.setSourceLocation(locationOf(_literal));
 				m_assembly.appendConstant(_literal.value);
 			},
-			[&](ReturnLabelSlot const& _returnLabel)
+			[&](FunctionReturnLabelSlot const&)
 			{
-				yulAssert(_returnLabel.call, "Cannot produce function return label.");
-				// TODO: maybe actually use IDs to index into returnLabels.
-				if (!m_returnLabels.count(_returnLabel.call))
-					m_returnLabels[_returnLabel.call] = m_assembly.newLabelId();
-				m_assembly.appendLabelReference(m_returnLabels.at(_returnLabel.call));
+				yulAssert(false, "Cannot produce function return label.");
+			},
+			[&](FunctionCallReturnLabelSlot const& _returnLabel)
+			{
+				if (!m_returnLabels.count(&_returnLabel.call.get()))
+					m_returnLabels[&_returnLabel.call.get()] = m_assembly.newLabelId();
+				m_assembly.appendLabelReference(m_returnLabels.at(&_returnLabel.call.get()));
 			},
 			[&](VariableSlot const& _variable)
 			{

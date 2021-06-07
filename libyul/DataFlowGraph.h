@@ -30,13 +30,16 @@
 namespace solidity::yul
 {
 
-struct ReturnLabelSlot
+struct FunctionCallReturnLabelSlot
 {
-	/// The call returning to this label or, when generating a function, nullptr for the label to which the function
-	/// is supposed to return.
-	yul::FunctionCall const* call = nullptr;
-	bool operator==(ReturnLabelSlot const& _rhs) const { return call == _rhs.call; }
-	bool operator<(ReturnLabelSlot const& _rhs) const { return call < _rhs.call; }
+	std::reference_wrapper<yul::FunctionCall const> call;
+	bool operator==(FunctionCallReturnLabelSlot const& _rhs) const { return &call.get() == &_rhs.call.get(); }
+	bool operator<(FunctionCallReturnLabelSlot const& _rhs) const { return &call.get() < &_rhs.call.get(); }
+};
+struct FunctionReturnLabelSlot
+{
+	bool operator==(FunctionReturnLabelSlot const&) const { return true; }
+	bool operator<(FunctionReturnLabelSlot const&) const { return false; }
 };
 struct VariableSlot
 {
@@ -54,17 +57,17 @@ struct LiteralSlot
 };
 struct TemporarySlot
 {
-	yul::FunctionCall const* call = nullptr;
+	std::reference_wrapper<yul::FunctionCall const> call;
 	size_t idx = 0;
-	bool operator==(TemporarySlot const& _rhs) const { return call == _rhs.call && idx == _rhs.idx; }
-	bool operator<(TemporarySlot const& _rhs) const { return std::make_pair(call, idx) < std::make_pair(_rhs.call, _rhs.idx); }
+	bool operator==(TemporarySlot const& _rhs) const { return &call.get() == &_rhs.call.get() && idx == _rhs.idx; }
+	bool operator<(TemporarySlot const& _rhs) const { return std::make_pair(&call.get(), idx) < std::make_pair(&_rhs.call.get(), _rhs.idx); }
 };
 struct JunkSlot
 {
 	bool operator==(JunkSlot const&) const { return true; }
 	bool operator<(JunkSlot const&) const { return false; }
 };
-using StackSlot = std::variant<ReturnLabelSlot, VariableSlot, LiteralSlot, TemporarySlot, JunkSlot>;
+using StackSlot = std::variant<FunctionCallReturnLabelSlot, FunctionReturnLabelSlot, VariableSlot, LiteralSlot, TemporarySlot, JunkSlot>;
 using Stack = std::vector<StackSlot>;
 
 struct DFG

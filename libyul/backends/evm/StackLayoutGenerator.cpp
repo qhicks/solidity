@@ -185,28 +185,14 @@ void StackLayoutGenerator::operator()(DFG::Operation const& _operation)
 
 	DEBUG(cout << "Operation pre before compress: " << stackToString(*m_stack) << std::endl;)
 
-	cxx20::erase_if(*m_stack, [](StackSlot const& _slot) {
-		if (auto const* returnLabelSlot = std::get_if<ReturnLabelSlot>(&_slot))
-		{
-			if (returnLabelSlot->call)
-				return true;
-		}
-		return false;
-	});
+	// TODO: this is an improper hack and does not account for the induced shuffling.
+	cxx20::erase_if(*m_stack, [](StackSlot const& _slot) { return holds_alternative<FunctionCallReturnLabelSlot>(_slot); });
 
 	for (auto&& [idx, slot]: *m_stack | ranges::views::enumerate | ranges::views::reverse)
-		// We can always push literals.
-		if (std::holds_alternative<LiteralSlot>(slot) || std::holds_alternative<JunkSlot>(slot))
+		// We can always push literals, junk and function call return labels.
+		if (holds_alternative<LiteralSlot>(slot) || holds_alternative<JunkSlot>(slot) || holds_alternative<FunctionCallReturnLabelSlot>(slot))
 			m_stack->pop_back(); // TODO: verify that this is fine during range traversal
-			// We can always push return labels of function calls.
-		else if (auto const* returnLabelSlot = std::get_if<ReturnLabelSlot>(&slot))
-		{
-			if (returnLabelSlot->call)
-				m_stack->pop_back();
-			else
-				break;
-		}
-			// We can always dup values already on stack.
+		// We can always dup values already on stack.
 		else if (util::findOffset(*m_stack | ranges::views::take(idx), slot))
 			m_stack->pop_back();
 		else
@@ -218,11 +204,8 @@ void StackLayoutGenerator::operator()(DFG::Operation const& _operation)
 		Stack newStack;
 		for (auto slot: *m_stack)
 		{
-			if (holds_alternative<LiteralSlot>(slot))
+			if (holds_alternative<LiteralSlot>(slot) || holds_alternative<FunctionCallReturnLabelSlot>(slot))
 				continue;
-			if (auto* retLabel = get_if<ReturnLabelSlot>(&slot))
-				if (retLabel->call)
-					continue;
 			if (util::findOffset(newStack, slot))
 				continue;
 			newStack.emplace_back(slot);
@@ -336,7 +319,7 @@ Stack StackLayoutGenerator::operator()(DFG::BasicBlock const& _block, Stack _ini
 			currentStack = _functionReturn.info->returnVariables | ranges::views::transform([](auto const& _varSlot){
 				return StackSlot{_varSlot};
 			}) | ranges::to<Stack>;
-			currentStack.emplace_back(ReturnLabelSlot{});
+			currentStack.emplace_back(FunctionReturnLabelSlot{});
 		},
 		[&](DFG::BasicBlock::Terminated const&) { currentStack.clear(); },
 	}, _block.exit);
@@ -381,20 +364,10 @@ Stack StackLayoutGenerator::combineStack(Stack const& _stack1, Stack const& _sta
 	Stack stack1 = _stack1 | ranges::views::drop(commonPrefix.size()) | ranges::to<Stack>;
 	Stack stack2 = _stack2 | ranges::views::drop(commonPrefix.size()) | ranges::to<Stack>;
 	cxx20::erase_if(stack1, [](StackSlot const& slot) {
-		if (ReturnLabelSlot const* returnSlot = get_if<ReturnLabelSlot>(&slot))
-			if (returnSlot->call)
-				return true;
-		if (holds_alternative<LiteralSlot>(slot))
-			return true;
-		return false;
+		return holds_alternative<LiteralSlot>(slot) || holds_alternative<FunctionCallReturnLabelSlot>(slot);
 	});
 	cxx20::erase_if(stack2, [](StackSlot const& slot) {
-		if (ReturnLabelSlot const* returnSlot = get_if<ReturnLabelSlot>(&slot))
-			if (returnSlot->call)
-				return true;
-		if (holds_alternative<LiteralSlot>(slot))
-			return true;
-		return false;
+		return holds_alternative<LiteralSlot>(slot) || holds_alternative<FunctionCallReturnLabelSlot>(slot);
 	});
 
 	Stack candidate;
