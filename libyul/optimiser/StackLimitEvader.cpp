@@ -30,6 +30,9 @@
 #include <libsolutil/Algorithms.h>
 #include <libsolutil/CommonData.h>
 
+#include <range/v3/view/concat.hpp>
+#include <range/v3/view/take.hpp>
+
 using namespace std;
 using namespace solidity;
 using namespace solidity::yul;
@@ -64,37 +67,22 @@ struct MemoryOffsetAllocator
 			for (YulString child: callGraph.at(_function))
 				requiredSlots = std::max(run(child), requiredSlots);
 
-		if (unreachableVariables.count(_function))
+		if (auto const* unreachables = util::valueOrNullptr(unreachableVariables, _function))
 		{
-			yulAssert(!slotAllocations.count(_function), "");
-
-			if (functionDefinitions.count(_function))
-			{
-				FunctionDefinition const* functionDefinition = functionDefinitions.at(_function);
-				yulAssert(functionDefinition, "");
-				size_t totalArgCount = functionDefinition->returnVariables.size() + functionDefinition->parameters.size();
-				size_t slotsNeeded = (totalArgCount > 16) ? totalArgCount - 16 : 0;
-
-				if (slotsNeeded)
-					for (TypedName const& param: functionDefinition->parameters)
-					{
-						slotAllocations[param.name] = requiredSlots++;
-						if (!--slotsNeeded)
-							break;
-					}
-				if (slotsNeeded)
-					for (TypedName const& returnVar: functionDefinition->returnVariables)
-					{
-						slotAllocations[returnVar.name] = requiredSlots++;
-						if (!--slotsNeeded)
-							break;
-					}
-				yulAssert(!slotsNeeded, "");
-			}
+			if (FunctionDefinition const* functionDefinition = util::valueOrDefault(functionDefinitions, _function, nullptr, util::allow_copy))
+				if (
+					size_t totalArgCount = functionDefinition->returnVariables.size() + functionDefinition->parameters.size();
+					totalArgCount > 16
+				)
+					for (TypedName const& var: ranges::concat_view(
+						functionDefinition->parameters,
+						functionDefinition->returnVariables
+					) | ranges::views::take(totalArgCount - 16))
+						slotAllocations[var.name] = requiredSlots++;
 
 			// Assign slots for all variables that become unreachable in the function body, if the above did not
 			// assign a slot for them already.
-			for (YulString variable: unreachableVariables.at(_function))
+			for (YulString variable: *unreachables)
 				// The empty case is a function with too many arguments or return values,
 				// which was already handled above.
 				if (!variable.empty() && !slotAllocations.count(variable))
@@ -104,11 +92,17 @@ struct MemoryOffsetAllocator
 		return slotsRequiredForFunction[_function] = requiredSlots;
 	}
 
+	/// Maps function names to the set of unreachable variables in that function.
+	/// An empty variable name means that the function has too many arguments or return variables.
 	map<YulString, set<YulString>> const& unreachableVariables;
+	/// The graph of immediate function calls of all functions.
 	map<YulString, set<YulString>> const& callGraph;
+	/// Maps the name of each user-defined function to its definition.
 	map<YulString, FunctionDefinition const*> const& functionDefinitions;
 
+	/// Maps variable names to the memory slot the respective variable is assigned.
 	map<YulString, uint64_t> slotAllocations{};
+	/// Maps function names to the number of memory slots the respective function requires.
 	map<YulString, uint64_t> slotsRequiredForFunction{};
 };
 
@@ -144,6 +138,8 @@ void StackLimitEvader::run(
 
 	// Make sure all calls to ``memoryguard`` we found have the same value as argument (otherwise, abort).
 	u256 reservedMemory = literalArgumentValue(*memoryGuardCalls.front());
+	yulAssert(reservedMemory < u256(1) << 32 - 1, "");
+
 	for (FunctionCall const* memoryGuardCall: memoryGuardCalls)
 		if (reservedMemory != literalArgumentValue(*memoryGuardCall))
 			return;
@@ -159,10 +155,10 @@ void StackLimitEvader::run(
 
 	MemoryOffsetAllocator memoryOffsetAllocator{_unreachableVariables, callGraph.functionCalls, functionDefinitions};
 	uint64_t requiredSlots = memoryOffsetAllocator.run();
+	yulAssert(requiredSlots < (uint64_t(1) << 32) - 1, "");
 
 	StackToMemoryMover::run(_context, reservedMemory, memoryOffsetAllocator.slotAllocations, requiredSlots, *_object.code);
 
-	yulAssert(requiredSlots < std::numeric_limits<uint64_t>::max() / 32, "");
 	reservedMemory += 32 * requiredSlots;
 	for (FunctionCall* memoryGuardCall: FunctionCallFinder::run(*_object.code, "memoryguard"_yulstring))
 	{
