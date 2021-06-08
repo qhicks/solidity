@@ -21,6 +21,8 @@ set(sources
 	SourceReferenceExtractor.h
 	SourceReferenceFormatter.cpp
 	SourceReferenceFormatter.h
+	KeyValueParser.cpp
+	KeyValueParser.h
 	Token.cpp
 	Token.h
 	UndefMacros.h
