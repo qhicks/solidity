@@ -18,7 +18,7 @@
 
 #pragma once
 
-#include <libyul/DataFlowGraph.h>
+#include <libyul/backends/evm/DataFlowGraph.h>
 
 #include <libsolutil/Visitor.h>
 

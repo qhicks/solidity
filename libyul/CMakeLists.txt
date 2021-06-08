@@ -34,8 +34,6 @@ add_library(yul
 	AssemblyStack.cpp
 	CompilabilityChecker.cpp
 	CompilabilityChecker.h
-	DataFlowGraph.cpp
-	DataFlowGraph.h
 	Dialect.cpp
 	Dialect.h
 	Exceptions.h
@@ -55,6 +53,9 @@ add_library(yul
 	backends/evm/AsmCodeGen.h
 	backends/evm/ConstantOptimiser.cpp
 	backends/evm/ConstantOptimiser.h
+	backends/evm/DataFlowGraph.h
+	backends/evm/DataFlowGraphBuilder.cpp
+	backends/evm/DataFlowGraphBuilder.h
 	backends/evm/EthAssemblyAdapter.cpp
 	backends/evm/EthAssemblyAdapter.h
 	backends/evm/EVMAssembly.cpp

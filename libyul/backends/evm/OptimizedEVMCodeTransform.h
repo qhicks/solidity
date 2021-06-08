@@ -24,7 +24,7 @@
 #include <libyul/backends/evm/EVMAssembly.h>
 
 #include <libyul/backends/evm/EVMDialect.h>
-#include <libyul/DataFlowGraph.h>
+#include <libyul/backends/evm/DataFlowGraph.h>
 #include <libyul/AST.h>
 #include <libyul/Scope.h>
 

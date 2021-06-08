@@ -17,10 +17,10 @@
 // SPDX-License-Identifier: GPL-3.0
 #include <libyul/backends/evm/OptimizedEVMCodeTransform.h>
 
+#include <libyul/backends/evm/DataFlowGraphBuilder.h>
 #include <libyul/backends/evm/StackHelpers.h>
 #include <libyul/backends/evm/StackLayoutGenerator.h>
 
-#include <libyul/DataFlowGraph.h>
 #include <libyul/Utilities.h>
 
 #include <libsolutil/Permutations.h>

@@ -21,7 +21,7 @@
 
 #pragma once
 
-#include <libyul/DataFlowGraph.h>
+#include <libyul/backends/evm/DataFlowGraph.h>
 
 #include <map>
 
