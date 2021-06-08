@@ -41,7 +41,7 @@ using namespace solidity;
 using namespace solidity::yul;
 using namespace std;
 
-#if 1
+#if 0
 #define DEBUG(x) x
 #else
 #define DEBUG(x) (void)0;

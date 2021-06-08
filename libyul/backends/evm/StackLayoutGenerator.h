@@ -35,23 +35,23 @@ class StackLayoutGenerator
 public:
 	static void run(OptimizedCodeTransformContext& _context);
 
-	Stack operator()(DFG::BasicBlock const& _block, Stack _initialExitLayout);
+private:
+	StackLayoutGenerator(OptimizedCodeTransformContext& _context);
 
 	/// @returns the optimal entry stack layout, s.t. @a _operation can be applied to it and
 	/// the result can be transformed to @a _exitStack with minimal stack shuffling.
 	Stack determineOptimalLayoutBeforeOperation(Stack _exitStack, DFG::Operation const& _operation);
 
-private:
-	StackLayoutGenerator(OptimizedCodeTransformContext& _context);
+	/// @returns the desired stack layout at the entry of @a _block, assuming the layout after
+	/// executing the block should be @a _exitStack.
+	Stack determineBlockEntry(Stack _exitStack, DFG::BasicBlock const& _block);
 
+	void processEntryPoint(DFG::BasicBlock const* _entry);
 	void stitchTogether(DFG::BasicBlock& _block, std::set<DFG::BasicBlock const*>& _visited);
 
+	static Stack combineStack(Stack const& _stack1, Stack const& _stack2);
+
 	OptimizedCodeTransformContext& m_context;
-
-	// TODO: name!
-	std::map<DFG::BasicBlock const*, Stack> m_initialExitLayoutOnLastVisit;
-
-	Stack combineStack(Stack const& _stack1, Stack const& _stack2);
 };
 
 }
