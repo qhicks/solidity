@@ -39,6 +39,7 @@ class ErrorReporter;
 namespace solidity::yul
 {
 struct AsmAnalysisInfo;
+struct StackLayout;
 
 class OptimizedCodeTransform
 {
@@ -52,6 +53,43 @@ public:
 		ExternalIdentifierAccess const& _identifierAccess = ExternalIdentifierAccess(),
 		bool _useNamedLabelsForFunctions = false
 	);
+private:
+	OptimizedCodeTransform(
+		AbstractAssembly& _assembly,
+		BuiltinContext& _builtinContext,
+		bool _useNamedLabelsForFunctions,
+		DFG const& _dfg,
+		StackLayout const& _stackLayout
+	);
+
+	AbstractAssembly::LabelID getFunctionLabel(Scope::Function const& _function);
+	void validateSlot(StackSlot const& _slot, Expression const& _expression);
+
+	bool tryCreateStackLayout(Stack _targetStack);
+	void compressStack();
+	void createStackLayout(Stack _targetStack);
+
+	void operator()(DFG::BasicBlock const& _block);
+	void operator()(DFG::FunctionInfo const& _functionInfo);
+public:
+	void operator()(DFG::FunctionCall const& _call);
+	void operator()(DFG::BuiltinCall const& _call);
+	void operator()(DFG::Assignment const& _assignment);
+
+private:
+	static void assertLayoutCompatibility(Stack const& _currentStack, Stack const& _desiredStack);
+
+	AbstractAssembly& m_assembly;
+	BuiltinContext& m_builtinContext;
+	bool m_useNamedLabelsForFunctions = true;
+	DFG const& m_dfg;
+	StackLayout const& m_stackLayout;
+	Stack m_stack;
+	std::map<yul::FunctionCall const*, AbstractAssembly::LabelID> m_returnLabels;
+	std::map<DFG::BasicBlock const*, AbstractAssembly::LabelID> m_blockLabels;
+	std::map<DFG::FunctionInfo const*, AbstractAssembly::LabelID> m_functionLabels;
+	std::set<DFG::BasicBlock const*> m_generated;
+	DFG::FunctionInfo const* m_currentFunctionInfo = nullptr;
 };
 
 }

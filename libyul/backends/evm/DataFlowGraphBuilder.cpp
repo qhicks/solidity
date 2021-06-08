@@ -71,7 +71,7 @@ std::unique_ptr<DFG> DataFlowGraphBuilder::build(
 	// Determine which blocks are reachable from the entry.
 	util::BreadthFirstSearch<DFG::BasicBlock*> reachabilityCheck{ranges::views::concat(
 		ranges::views::single(result->entry),
-		result->functions | ranges::views::values | member_view<&DFG::FunctionInfo::entry>
+		result->functionInfo | ranges::views::values | member_view<&DFG::FunctionInfo::entry>
 	) | ranges::to<list>};
 	reachabilityCheck.run([&](DFG::BasicBlock* _node, auto&& _addChild) {
 		visit(util::GenericVisitor{
@@ -434,12 +434,13 @@ void DataFlowGraphBuilder::operator()(FunctionDefinition const& _function)
 	yulAssert(m_scope, "");
 	yulAssert(m_scope->identifiers.count(_function.name), "");
 	Scope::Function& function = std::get<Scope::Function>(m_scope->identifiers.at(_function.name));
+	m_graph.functions.emplace_back(&function);
 
 	yulAssert(m_info.scopes.at(&_function.body), "");
 	Scope* virtualFunctionScope = m_info.scopes.at(m_info.virtualBlocks.at(&_function).get()).get();
 	yulAssert(virtualFunctionScope, "");
 
-	auto&& [it, inserted] = m_graph.functions.emplace(std::make_pair(&function, DFG::FunctionInfo{
+	auto&& [it, inserted] = m_graph.functionInfo.emplace(std::make_pair(&function, DFG::FunctionInfo{
 		_function.debugData,
 		function,
 		&m_graph.makeBlock(),

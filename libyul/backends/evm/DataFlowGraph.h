@@ -161,7 +161,9 @@ struct DFG
 	/// The main entry point, i.e. the start of the outermost Yul block.
 	BasicBlock* entry = nullptr;
 	/// Subgraphs for functions.
-	std::map<Scope::Function const*, FunctionInfo> functions;
+	std::map<Scope::Function const*, FunctionInfo> functionInfo;
+	/// List of functions in order of declaration.
+	std::list<Scope::Function const*> functions;
 
 	/// Container for blocks for explicit ownership.
 	std::list<BasicBlock> blocks;

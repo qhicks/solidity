@@ -430,12 +430,12 @@ StackLayout StackLayoutGenerator::run(DFG const& _dfg)
 	StackLayoutGenerator stackLayoutGenerator{stackLayout};
 
 	stackLayoutGenerator.processEntryPoint(_dfg.entry);
-	for (auto& functionInfo: _dfg.functions | ranges::views::values)
+	for (auto& functionInfo: _dfg.functionInfo | ranges::views::values)
 		stackLayoutGenerator.processEntryPoint(functionInfo.entry);
 
 	std::set<DFG::BasicBlock const*> visited;
 	stackLayoutGenerator.stitchConditionalJumps(*_dfg.entry);
-	for (auto& functionInfo: _dfg.functions | ranges::views::values)
+	for (auto& functionInfo: _dfg.functionInfo | ranges::views::values)
 		stackLayoutGenerator.stitchConditionalJumps(*functionInfo.entry);
 	return stackLayout;
 }
