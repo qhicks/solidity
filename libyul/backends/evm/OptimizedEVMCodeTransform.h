@@ -52,6 +52,7 @@ struct OptimizedCodeTransformContext
 	struct OperationInfo
 	{
 		Stack entryStack;
+		/// Probably not necessary and to be removed.
 		Stack exitStack;
 	};
 	std::map<DFG::Operation const*, OperationInfo> operationStacks;

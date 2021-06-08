@@ -30,17 +30,20 @@
 namespace solidity::yul
 {
 
+/// The label pushed as return label before a function call, i.e. the label the call is supposed to return to.
 struct FunctionCallReturnLabelSlot
 {
 	std::reference_wrapper<yul::FunctionCall const> call;
 	bool operator==(FunctionCallReturnLabelSlot const& _rhs) const { return &call.get() == &_rhs.call.get(); }
 	bool operator<(FunctionCallReturnLabelSlot const& _rhs) const { return &call.get() < &_rhs.call.get(); }
 };
+/// The return label of a function while generating the code of the function body.
 struct FunctionReturnLabelSlot
 {
 	bool operator==(FunctionReturnLabelSlot const&) const { return true; }
 	bool operator<(FunctionReturnLabelSlot const&) const { return false; }
 };
+/// A slot containing the current value of a particular variable.
 struct VariableSlot
 {
 	std::reference_wrapper<Scope::Variable const> variable;
@@ -48,6 +51,7 @@ struct VariableSlot
 	bool operator==(VariableSlot const& _rhs) const { return &variable.get() == &_rhs.variable.get(); }
 	bool operator<(VariableSlot const& _rhs) const { return &variable.get() < &_rhs.variable.get(); }
 };
+/// A slot containing a literal value.
 struct LiteralSlot
 {
 	u256 value;
@@ -55,6 +59,7 @@ struct LiteralSlot
 	bool operator==(LiteralSlot const& _rhs) const { return value == _rhs.value; }
 	bool operator<(LiteralSlot const& _rhs) const { return value < _rhs.value; }
 };
+/// A slot containing the idx-th return value of a previous call.
 struct TemporarySlot
 {
 	std::reference_wrapper<yul::FunctionCall const> call;
@@ -62,14 +67,18 @@ struct TemporarySlot
 	bool operator==(TemporarySlot const& _rhs) const { return &call.get() == &_rhs.call.get() && idx == _rhs.idx; }
 	bool operator<(TemporarySlot const& _rhs) const { return std::make_pair(&call.get(), idx) < std::make_pair(&_rhs.call.get(), _rhs.idx); }
 };
+/// A slot containing an arbitrary value that is always eventually popped and never used.
+/// Used to maintain stack balance on control flow joins.
 struct JunkSlot
 {
 	bool operator==(JunkSlot const&) const { return true; }
 	bool operator<(JunkSlot const&) const { return false; }
 };
 using StackSlot = std::variant<FunctionCallReturnLabelSlot, FunctionReturnLabelSlot, VariableSlot, LiteralSlot, TemporarySlot, JunkSlot>;
+/// The stack top is usually the last element of the vector.
 using Stack = std::vector<StackSlot>;
 
+/// Data flow graph consisting of ``DFG::BasicBlock``s connected by control flow.
 struct DFG
 {
 	explicit DFG() {}
@@ -110,6 +119,8 @@ struct DFG
 	};
 
 	struct FunctionInfo;
+	/// A basic control flow block containing ``Operation``s acting on the stack.
+	/// Maintains a list of entry blocks and a typed exit.
 	struct BasicBlock
 	{
 		std::vector<BasicBlock const*> entries;
@@ -141,7 +152,9 @@ struct DFG
 		std::vector<VariableSlot> returnVariables;
 	};
 
+	/// The main entry point, i.e. the start of the outermost Yul block.
 	BasicBlock* entry = nullptr;
+	/// Subgraphs for functions.
 	std::map<Scope::Function const*, FunctionInfo> functions;
 
 	/// Container for blocks for explicit ownership.

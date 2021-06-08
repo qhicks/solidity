@@ -203,6 +203,7 @@ void StackLayoutGenerator::operator()(DFG::Operation const& _operation)
 			break;
 	DEBUG(cout << "Operation pre after compress: " << stackToString(*m_stack) << "   " << m_stack << std::endl;)
 
+	// TODO: suboptimal. Should account for induced stack shuffling.
 	if (m_stack->size() > 12)
 	{
 		Stack newStack;
