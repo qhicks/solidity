@@ -559,10 +559,7 @@ void CodeGenerator::createStackLayout(Stack _targetStack)
 						m_assembly.appendConstant(0);
 						return;
 					}
-				DEBUG(cout << "SLOT: " << stackSlotToString(StackSlot{_slot}) << std::endl;)
-				DEBUG(cout << "THIS SHOULD NOT HAPPEN!" << std::endl;)
-				// Also on control flow joins some slots are not correctly marked as junk slots and end up here so far.
-				m_assembly.appendInstruction(evmasm::Instruction::CALLDATASIZE);
+				yulAssert(false, "");
 			},
 			[&](TemporarySlot const&)
 			{
@@ -571,15 +568,6 @@ void CodeGenerator::createStackLayout(Stack _targetStack)
 			[&](JunkSlot const&)
 			{
 				m_assembly.appendInstruction(evmasm::Instruction::CALLDATASIZE);
-			},
-			[&](auto const& _slot)
-			{
-				DEBUG(cout << "SLOT: " << stackSlotToString(StackSlot{_slot}) << std::endl;)
-				DEBUG(cout << "THIS SHOULD NOT HAPPEN!" << std::endl;) // Actually it appears to happen for uninitialized return variables.
-				// Also on control flow joins some slots are not correctly marked as junk slots and end up here so far.
-				// TODO: Both should be fixed.
-				m_assembly.appendInstruction(evmasm::Instruction::CALLDATASIZE);
-				//yulAssert(false, "Slot not found.");
 			}
 		}, _slot);
 	}, [&]() { m_assembly.appendInstruction(evmasm::Instruction::POP); });
