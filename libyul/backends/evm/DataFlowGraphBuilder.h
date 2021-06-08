@@ -74,7 +74,7 @@ private:
 		std::reference_wrapper<DFG::BasicBlock> post;
 	};
 	std::optional<ForLoopInfo> m_forLoopInfo;
-	DFG::BasicBlock* m_currentFunctionExit = nullptr;
+	std::optional<DFG::BasicBlock::FunctionReturn> m_currentFunctionExit;
 };
 
 }

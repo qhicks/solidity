@@ -438,8 +438,20 @@ void StackLayoutGenerator::stitchTogether(DFG::BasicBlock& _block, std::set<DFG:
 			Stack exitLayout = info.exitLayout;
 			yulAssert(!exitLayout.empty(), "");
 			exitLayout.pop_back();
-			zeroTargetInfo.entryLayout = exitLayout;
-			nonZeroTargetInfo.entryLayout = exitLayout;
+			{
+				Stack newZeroEntryLayout = exitLayout;
+				for (auto& slot: newZeroEntryLayout)
+					if (!util::findOffset(zeroTargetInfo.entryLayout, slot))
+						slot = JunkSlot{};
+				zeroTargetInfo.entryLayout = newZeroEntryLayout;
+			}
+			{
+				Stack newNonZeroEntryLayout = exitLayout;
+				for (auto& slot: newNonZeroEntryLayout)
+					if (!util::findOffset(nonZeroTargetInfo.entryLayout, slot))
+						slot = JunkSlot{};
+				nonZeroTargetInfo.entryLayout = newNonZeroEntryLayout;
+			}
 			stitchTogether(*_conditionalJump.zero, _visited);
 			stitchTogether(*_conditionalJump.nonZero, _visited);
 		},

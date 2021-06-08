@@ -424,8 +424,8 @@ void DataFlowGraphBuilder::operator()(Continue const&)
 
 void DataFlowGraphBuilder::operator()(Leave const&)
 {
-	yulAssert(m_currentFunctionExit, "");
-	jump(*m_currentFunctionExit);
+	yulAssert(m_currentFunctionExit.has_value(), "");
+	m_currentBlock->exit = *m_currentFunctionExit;
 	m_currentBlock = &m_graph.makeBlock();
 }
 
@@ -460,11 +460,10 @@ void DataFlowGraphBuilder::operator()(FunctionDefinition const& _function)
 	DFG::FunctionInfo& info = it->second;
 
 	DataFlowGraphBuilder builder{m_graph, m_info, m_dialect};
-	builder.m_currentFunctionExit = &m_graph.makeBlock();
-	builder.m_currentFunctionExit->exit = DFG::BasicBlock::FunctionReturn{&info};
+	builder.m_currentFunctionExit = DFG::BasicBlock::FunctionReturn{&info};
 	builder.m_currentBlock = info.entry;
 	builder(_function.body);
-	builder.jump(*builder.m_currentFunctionExit);
+	builder.m_currentBlock->exit = DFG::BasicBlock::FunctionReturn{&info};
 }
 
 Scope::Variable const& DataFlowGraphBuilder::lookupVariable(YulString _name) const

@@ -258,10 +258,11 @@ void CodeGenerator::operator()(DFG::BasicBlock const& _block)
 		DEBUG(cout << "F: GENERATING: " << &_block << " (label: " << (label ? std::to_string(*label) : "NONE") << ")" << std::endl;)
 	}
 
-	yulAssert(m_stack == info.entryLayout, "");
+	for (auto [stackSlot, entryLayoutSlot]: ranges::zip_view(m_stack, info.entryLayout))
+		yulAssert(holds_alternative<JunkSlot>(entryLayoutSlot) || stackSlot == entryLayoutSlot, "");
+	m_stack = info.entryLayout;
 
-	DEBUG(cout << "F: CREATING ENTRY LAYOUT " << stackToString(info.entryLayout) << " FROM " << stackToString(m_stack) << std::endl;)
-	createStackLayout(info.entryLayout);
+	DEBUG(cout << "F: ASSUMING ENTRY LAYOUT " << stackToString(info.entryLayout) << std::endl;)
 
 	for (auto const& operation: _block.operations)
 	{
@@ -357,8 +358,10 @@ void CodeGenerator::operator()(DFG::BasicBlock const& _block)
 			m_assembly.appendJumpToIf(m_blockLabels[_conditionalJump.nonZero]);
 			m_stack.pop_back();
 			// TODO: assert this?
-			yulAssert(m_stack == m_info.blockInfos.at(_conditionalJump.nonZero).entryLayout, "");
-			yulAssert(m_stack == m_info.blockInfos.at(_conditionalJump.zero).entryLayout, "");
+			for (auto [stackSlot, entryLayoutSlot]: ranges::zip_view(m_stack, m_info.blockInfos.at(_conditionalJump.nonZero).entryLayout))
+				yulAssert(holds_alternative<JunkSlot>(entryLayoutSlot) || stackSlot == entryLayoutSlot, "");
+			for (auto [stackSlot, entryLayoutSlot]: ranges::zip_view(m_stack, m_info.blockInfos.at(_conditionalJump.zero).entryLayout))
+				yulAssert(holds_alternative<JunkSlot>(entryLayoutSlot) || stackSlot == entryLayoutSlot, "");
 
 			if (!m_generated.count(_conditionalJump.nonZero))
 				m_stagedBlocks.emplace_back(_conditionalJump.nonZero);
