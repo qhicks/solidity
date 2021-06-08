@@ -38,7 +38,7 @@ using namespace solidity;
 using namespace solidity::yul;
 using namespace std;
 
-OptimizedCodeTransform::OptimizedCodeTransform(
+OptimizedEVMCodeTransform::OptimizedEVMCodeTransform(
 	AbstractAssembly& _assembly,
 	BuiltinContext& _builtinContext,
 	bool _useNamedLabelsForFunctions,
@@ -53,13 +53,13 @@ m_stackLayout(_stackLayout)
 {
 }
 
-void OptimizedCodeTransform::assertLayoutCompatibility(Stack const& _currentStack, Stack const& _desiredStack)
+void OptimizedEVMCodeTransform::assertLayoutCompatibility(Stack const& _currentStack, Stack const& _desiredStack)
 {
 	for (auto&& [currentSlot, desiredSlot]: ranges::zip_view(_currentStack, _desiredStack))
 		yulAssert(holds_alternative<JunkSlot>(desiredSlot) || currentSlot == desiredSlot, "");
 }
 
-AbstractAssembly::LabelID OptimizedCodeTransform::getFunctionLabel(Scope::Function const& _function)
+AbstractAssembly::LabelID OptimizedEVMCodeTransform::getFunctionLabel(Scope::Function const& _function)
 {
 	DFG::FunctionInfo const& functionInfo = m_dfg.functionInfo.at(&_function);
 	if (!m_functionLabels.count(&functionInfo))
@@ -75,7 +75,7 @@ AbstractAssembly::LabelID OptimizedCodeTransform::getFunctionLabel(Scope::Functi
 	return m_functionLabels[&functionInfo];
 }
 
-void OptimizedCodeTransform::validateSlot(StackSlot const& _slot, Expression const& _expression)
+void OptimizedEVMCodeTransform::validateSlot(StackSlot const& _slot, Expression const& _expression)
 {
 	std::visit(util::GenericVisitor{
 		[&](yul::Literal const& _literal) {
@@ -93,7 +93,7 @@ void OptimizedCodeTransform::validateSlot(StackSlot const& _slot, Expression con
 	}, _expression);
 }
 
-void OptimizedCodeTransform::operator()(DFG::FunctionInfo const& _functionInfo)
+void OptimizedEVMCodeTransform::operator()(DFG::FunctionInfo const& _functionInfo)
 {
 	yulAssert(!m_currentFunctionInfo, "");
 	m_currentFunctionInfo = &_functionInfo;
@@ -117,7 +117,7 @@ void OptimizedCodeTransform::operator()(DFG::FunctionInfo const& _functionInfo)
 	m_currentFunctionInfo = nullptr;
 }
 
-void OptimizedCodeTransform::operator()(DFG::FunctionCall const& _call)
+void OptimizedEVMCodeTransform::operator()(DFG::FunctionCall const& _call)
 {
 	auto returnLabel = m_returnLabels.at(&_call.functionCall.get());
 
@@ -145,7 +145,7 @@ void OptimizedCodeTransform::operator()(DFG::FunctionCall const& _call)
 	yulAssert(m_assembly.stackHeight() == static_cast<int>(m_stack.size()), "");
 }
 
-void OptimizedCodeTransform::operator()(DFG::BuiltinCall const& _call)
+void OptimizedEVMCodeTransform::operator()(DFG::BuiltinCall const& _call)
 {
 	// Assert that we got a correct stack for the call.
 	for (auto&& [arg, slot]: ranges::zip_view(
@@ -165,7 +165,7 @@ void OptimizedCodeTransform::operator()(DFG::BuiltinCall const& _call)
 	yulAssert(m_assembly.stackHeight() == static_cast<int>(m_stack.size()), "");
 }
 
-void OptimizedCodeTransform::operator()(DFG::Assignment const& _assignment)
+void OptimizedEVMCodeTransform::operator()(DFG::Assignment const& _assignment)
 {
 	for (auto& currentSlot: m_stack)
 		if (VariableSlot const* varSlot = get_if<VariableSlot>(&currentSlot))
@@ -176,7 +176,7 @@ void OptimizedCodeTransform::operator()(DFG::Assignment const& _assignment)
 		currentSlot = varSlot;
 }
 
-void OptimizedCodeTransform::operator()(DFG::BasicBlock const& _block)
+void OptimizedEVMCodeTransform::operator()(DFG::BasicBlock const& _block)
 {
 	if (m_generated.count(&_block))
 		return;
@@ -269,7 +269,7 @@ void OptimizedCodeTransform::operator()(DFG::BasicBlock const& _block)
 	}, _block.exit);
 }
 
-bool OptimizedCodeTransform::tryCreateStackLayout(Stack _targetStack)
+bool OptimizedEVMCodeTransform::tryCreateStackLayout(Stack _targetStack)
 {
 	Stack commonPrefix;
 	for (auto&& [slot1, slot2]: ranges::zip_view(m_stack, _targetStack))
@@ -301,7 +301,7 @@ bool OptimizedCodeTransform::tryCreateStackLayout(Stack _targetStack)
 	return good;
 }
 
-void OptimizedCodeTransform::compressStack()
+void OptimizedEVMCodeTransform::compressStack()
 {
 	static constexpr auto canBeRegenerated = [](StackSlot const& _slot) -> bool {
 		return holds_alternative<LiteralSlot>(_slot) || holds_alternative<FunctionCallReturnLabelSlot>(_slot);
@@ -340,7 +340,7 @@ void OptimizedCodeTransform::compressStack()
 	}
 }
 
-void OptimizedCodeTransform::createStackLayout(Stack _targetStack)
+void OptimizedEVMCodeTransform::createStackLayout(Stack _targetStack)
 {
 	Stack commonPrefix;
 	for (auto&& [currentSlot, targetSlot]: ranges::zip_view(m_stack, _targetStack))
@@ -440,7 +440,7 @@ void OptimizedCodeTransform::createStackLayout(Stack _targetStack)
 		m_stack.emplace_back(slot);
 }
 
-void OptimizedCodeTransform::run(
+void OptimizedEVMCodeTransform::run(
 	AbstractAssembly& _assembly,
 	AsmAnalysisInfo& _analysisInfo,
 	Block const& _block,
@@ -452,7 +452,7 @@ void OptimizedCodeTransform::run(
 {
 	std::unique_ptr<DFG> dfg = DataFlowGraphBuilder::build(_analysisInfo, _dialect, _block);
 	StackLayout stackLayout = StackLayoutGenerator::run(*dfg);
-	OptimizedCodeTransform optimizedCodeTransform(_assembly, _builtinContext, _useNamedLabelsForFunctions,  *dfg, stackLayout);
+	OptimizedEVMCodeTransform optimizedCodeTransform(_assembly, _builtinContext, _useNamedLabelsForFunctions,  *dfg, stackLayout);
 	optimizedCodeTransform(*dfg->entry);
 	for (Scope::Function const* function: dfg->functions)
 		optimizedCodeTransform(dfg->functionInfo.at(function));

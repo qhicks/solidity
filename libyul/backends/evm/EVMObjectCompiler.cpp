@@ -61,7 +61,7 @@ void EVMObjectCompiler::run(Object& _object, bool _optimize)
 	yulAssert(_object.analysisInfo, "No analysis info.");
 	yulAssert(_object.code, "No code.");
 	if (_optimize)
-		OptimizedCodeTransform::run(m_assembly, *_object.analysisInfo, *_object.code, m_dialect, context);
+		OptimizedEVMCodeTransform::run(m_assembly, *_object.analysisInfo, *_object.code, m_dialect, context);
 	else
 	{
 		// We do not catch and re-throw the stack too deep exception here because it is a YulException,

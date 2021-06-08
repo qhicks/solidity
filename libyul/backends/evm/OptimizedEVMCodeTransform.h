@@ -41,7 +41,7 @@ namespace solidity::yul
 struct AsmAnalysisInfo;
 struct StackLayout;
 
-class OptimizedCodeTransform
+class OptimizedEVMCodeTransform
 {
 public:
 	static void run(
@@ -54,7 +54,7 @@ public:
 		bool _useNamedLabelsForFunctions = false
 	);
 private:
-	OptimizedCodeTransform(
+	OptimizedEVMCodeTransform(
 		AbstractAssembly& _assembly,
 		BuiltinContext& _builtinContext,
 		bool _useNamedLabelsForFunctions,

@@ -46,7 +46,7 @@ void CodeGenerator::assemble(
 	EthAssemblyAdapter assemblyAdapter(_assembly);
 	BuiltinContext builtinContext;
 	if (_optimizeStackAllocation)
-		OptimizedCodeTransform::run(
+		OptimizedEVMCodeTransform::run(
 			assemblyAdapter,
 			_analysisInfo,
 			_parsedData,
