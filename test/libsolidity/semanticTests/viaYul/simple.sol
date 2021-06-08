@@ -9,7 +9,7 @@ contract C {
 	}
 }
 // ====
-// compileViaYul: true
 // allowNonExistingFunctions: true
+// compileViaYul: true
 // ----
-// f(uint256): 3 ->
+// f(uint256): 3 -> 0x42, 0x21
