@@ -55,7 +55,7 @@ void permute(unsigned _n, GetTargetPosition _getTargetPosition, Swap _swap, Pop 
 	if (static_cast<unsigned>(targetPositionTop) == _n - 1)
 	{
 		// The last element is in position.
-		// Seach for the deepest element that is not in position.
+		// Search for the deepest element that is not in position.
 		// If there is none, we are done. Otherwise swap it up and recurse.
 		for (int i = 0; i < static_cast<int>(_n - 1); ++i)
 			if (_getTargetPosition(static_cast<unsigned>(i)) != i)

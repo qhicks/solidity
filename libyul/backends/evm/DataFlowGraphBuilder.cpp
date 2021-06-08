@@ -310,7 +310,7 @@ void DataFlowGraphBuilder::operator()(Switch const& _switch)
 	YulString ghostVariableName("GHOST[" + to_string(ghostVariableId) + "]");
 	auto& ghostVar = m_graph.ghostVariables.emplace_back(Scope::Variable{""_yulstring, ghostVariableName});
 
-	// Artifically generate:
+	// Artificially generate:
 	// let <ghostVariable> := <switchExpression>
 	VariableSlot ghostVarSlot{ghostVar, debugDataOf(*_switch.expression)};
 	m_currentBlock->operations.emplace_back(DFG::Operation{
