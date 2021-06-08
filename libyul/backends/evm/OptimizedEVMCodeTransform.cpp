@@ -567,7 +567,20 @@ void CodeGenerator::createStackLayout(Stack _targetStack)
 			},
 			[&](JunkSlot const&)
 			{
-				m_assembly.appendInstruction(evmasm::Instruction::CALLDATASIZE);
+				// Note: this will always be popped, so we can push anything.
+				// TODO: discuss if PC is in fact a good choice here.
+				// Advantages:
+				// - costs only 2 gas
+				// - deterministic value (in case it is in fact used due to some bug)
+				// - hard to exploit in case of a bug
+				// - distinctive, since it is not generated elsewhere
+				// Disadvantages:
+				// - static analysis might get confused until it realizes that these are always popped
+				// Alternatives:
+				// - any other opcode with cost 2
+				// - unless the stack is empty: DUP1
+				// - the constant 0
+				m_assembly.appendInstruction(evmasm::Instruction::PC);
 			}
 		}, _slot);
 	}, [&]() { m_assembly.appendInstruction(evmasm::Instruction::POP); });
