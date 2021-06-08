@@ -22,7 +22,6 @@
 #include <libyul/backends/evm/StackLayoutGenerator.h>
 
 #include <libyul/backends/evm/StackHelpers.h>
-#include <libyul/backends/evm/OptimizedEVMCodeTransform.h>
 
 #include <libsolutil/Algorithms.h>
 #include <libsolutil/cxx20.h>
@@ -41,12 +40,6 @@
 using namespace solidity;
 using namespace solidity::yul;
 using namespace std;
-
-#if 0
-#define DEBUG(x) x
-#else
-#define DEBUG(x) (void)0;
-#endif
 
 StackLayoutGenerator::StackLayoutGenerator(StackLayout& _layout): m_layout(_layout)
 {
@@ -120,12 +113,6 @@ Stack StackLayoutGenerator::propagateStackThroughOperation(Stack _exitStack, DFG
 {
 	Stack& stack = _exitStack;
 
-	DEBUG(
-		cout << "OPERATION post:   " << stackToString(stack) << std::endl
-			<< "          input:  " << stackToString(_operation.input) << std::endl
-			<< "          output: " << stackToString(_operation.output) << std::endl;
-	)
-
 	vector<set<unsigned>> targetPositions(_operation.output.size(), set<unsigned>{});
 	size_t numToKeep = 0;
 	for (size_t idx: ranges::views::iota(0u, targetPositions.size()))
@@ -151,25 +138,15 @@ Stack StackLayoutGenerator::propagateStackThroughOperation(Stack _exitStack, DFG
 	stack = createIdealLayout(stack, layout);
 
 	if (auto const* assignment = get_if<DFG::Assignment>(&_operation.operation))
-	{
 		for (auto& stackSlot: stack)
 			if (auto const* varSlot = get_if<VariableSlot>(&stackSlot))
 				if (util::findOffset(assignment->variables, *varSlot))
 					stackSlot = JunkSlot{};
-		DEBUG(
-			cout << "B: assignment (";
-			for (auto var: assignment->variables)
-				cout << var.variable.get().name.str() << " ";
-			cout << ") pre: " << stackToString(stack) << std::endl;
-		)
-	}
 
 	for (StackSlot const& input: _operation.input)
 		stack.emplace_back(input);
 
 	m_layout.operationEntryLayout[&_operation] = stack;
-
-	DEBUG(cout << "Operation pre before compress: " << stackToString(stack) << std::endl;)
 
 	// TODO: We will potentially accumulate a lot of return labels here.
 	// Removing them naively has huge implications on both code size and runtime gas cost (both positive and negative):
@@ -185,7 +162,6 @@ Stack StackLayoutGenerator::propagateStackThroughOperation(Stack _exitStack, DFG
 			stack.pop_back();
 		else
 			break;
-	DEBUG(cout << "Operation pre after compress: " << stackToString(stack) << std::endl;)
 
 	// TODO: suboptimal. Should account for induced stack shuffling.
 	if (stack.size() > 12)
@@ -351,8 +327,6 @@ Stack StackLayoutGenerator::combineStack(Stack const& _stack1, Stack const& _sta
 /*	if (candidate.size() > 8)
 		return candidate;*/
 
-	DEBUG(cout << "COMBINE STACKS: " << stackToString(stack1) << " + " << stackToString(stack2) << std::endl;)
-
 	auto evaluate = [&](Stack const& _candidate) -> size_t {
 		unsigned numOps = 0;
 		Stack testStack = _candidate;
@@ -375,7 +349,6 @@ Stack StackLayoutGenerator::combineStack(Stack const& _stack1, Stack const& _sta
 			[&](){},
 			true
 		);
-		// DEBUG(cout << "  CANDIDATE: " << stackToString(_candidate) << ": " << numOps << " swaps." << std::endl;)
 		return numOps;
 	};
 
@@ -402,8 +375,6 @@ Stack StackLayoutGenerator::combineStack(Stack const& _stack1, Stack const& _sta
 			++i;
 		}
 	}
-
-	DEBUG(cout << " BEST: " << stackToString(sortedCandidates.begin()->second) << " (" << sortedCandidates.begin()->first << " swaps)" << std::endl;)
 
 	for (auto slot: sortedCandidates.begin()->second)
 		commonPrefix.emplace_back(slot);
