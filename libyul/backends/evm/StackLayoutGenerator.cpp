@@ -47,7 +47,7 @@ using namespace std;
 #define DEBUG(x) (void)0;
 #endif
 
-StackLayoutGenerator::StackLayoutGenerator(OptimizedCodeTransformContext& _context): m_context(_context)
+StackLayoutGenerator::StackLayoutGenerator(StackLayout& _layout): m_layout(_layout)
 {
 }
 
@@ -117,9 +117,6 @@ Stack createIdealLayout(Stack const& post, vector<variant<PreviousSlot, set<unsi
 
 Stack StackLayoutGenerator::determineOptimalLayoutBeforeOperation(Stack _exitStack, DFG::Operation const& _operation)
 {
-	OptimizedCodeTransformContext::OperationInfo& operationInfo = m_context.operationStacks[&_operation];
-	operationInfo.exitStack = _exitStack;
-
 	Stack& stack = _exitStack;
 
 	DEBUG(
@@ -169,7 +166,7 @@ Stack StackLayoutGenerator::determineOptimalLayoutBeforeOperation(Stack _exitSta
 	for (StackSlot const& input: _operation.input)
 		stack.emplace_back(input);
 
-	operationInfo.entryStack = stack;
+	m_layout.operationEntryStacks[&_operation] = stack;
 
 	DEBUG(cout << "Operation pre before compress: " << stackToString(stack) << std::endl;)
 
@@ -240,14 +237,14 @@ void StackLayoutGenerator::processEntryPoint(DFG::BasicBlock const* _entry)
 				{
 					visited.emplace(block);
 					backwardsJumps.emplace_back(block, _jump.target);
-					if (auto* info = util::valueOrNullptr(m_context.blockInfos, _jump.target))
+					if (auto* info = util::valueOrNullptr(m_layout.blockInfos, _jump.target))
 						return info->entryLayout;
 					return Stack{};
 				}
 				if (visited.count(_jump.target))
 				{
 					visited.emplace(block);
-					return m_context.blockInfos.at(_jump.target).entryLayout;
+					return m_layout.blockInfos.at(_jump.target).entryLayout;
 				}
 				toVisit.emplace_front(_jump.target);
 				return nullopt;
@@ -259,8 +256,8 @@ void StackLayoutGenerator::processEntryPoint(DFG::BasicBlock const* _entry)
 				if (zeroVisited && nonZeroVisited)
 				{
 					Stack stack = combineStack(
-						m_context.blockInfos.at(_conditionalJump.zero).entryLayout,
-						m_context.blockInfos.at(_conditionalJump.nonZero).entryLayout
+						m_layout.blockInfos.at(_conditionalJump.zero).entryLayout,
+						m_layout.blockInfos.at(_conditionalJump.nonZero).entryLayout
 					);
 					stack.emplace_back(_conditionalJump.condition);
 					visited.emplace(block);
@@ -293,7 +290,7 @@ void StackLayoutGenerator::processEntryPoint(DFG::BasicBlock const* _entry)
 			/*if (auto* previousInfo = util::valueOrNullptr(m_context.blockInfos, block))
 				if (previousInfo->exitLayout == *exitLayout)
 					continue;*/
-			auto& info = m_context.blockInfos[block];
+			auto& info = m_layout.blockInfos[block];
 			info.exitLayout = *exitLayout;
 			info.entryLayout = determineBlockEntry(info.exitLayout, *block);
 
@@ -304,8 +301,8 @@ void StackLayoutGenerator::processEntryPoint(DFG::BasicBlock const* _entry)
 
 	for (auto [block, target]: backwardsJumps)
 		if (ranges::any_of(
-			m_context.blockInfos[target].entryLayout,
-			[exitLayout = m_context.blockInfos[block].exitLayout](StackSlot const& _slot) {
+			m_layout.blockInfos[target].entryLayout,
+			[exitLayout = m_layout.blockInfos[block].exitLayout](StackSlot const& _slot) {
 				return !util::findOffset(exitLayout, _slot);
 			}
 		))
@@ -417,7 +414,7 @@ void StackLayoutGenerator::stitchTogether(DFG::BasicBlock& _block, std::set<DFG:
 	if (_visited.count(&_block))
 		return;
 	_visited.insert(&_block);
-	auto& info = m_context.blockInfos.at(&_block);
+	auto& info = m_layout.blockInfos.at(&_block);
 	std::visit(util::GenericVisitor{
 		[&](DFG::BasicBlock::MainExit const&)
 		{
@@ -432,8 +429,8 @@ void StackLayoutGenerator::stitchTogether(DFG::BasicBlock& _block, std::set<DFG:
 		},
 		[&](DFG::BasicBlock::ConditionalJump const& _conditionalJump)
 		{
-			auto& zeroTargetInfo = m_context.blockInfos.at(_conditionalJump.zero);
-			auto& nonZeroTargetInfo = m_context.blockInfos.at(_conditionalJump.nonZero);
+			auto& zeroTargetInfo = m_layout.blockInfos.at(_conditionalJump.zero);
+			auto& nonZeroTargetInfo = m_layout.blockInfos.at(_conditionalJump.nonZero);
 			// TODO: Assert correctness, resp. achievability of layout.
 			Stack exitLayout = info.exitLayout;
 			yulAssert(!exitLayout.empty(), "");
@@ -463,16 +460,18 @@ void StackLayoutGenerator::stitchTogether(DFG::BasicBlock& _block, std::set<DFG:
 
 }
 
-void StackLayoutGenerator::run(OptimizedCodeTransformContext& _context)
+StackLayout StackLayoutGenerator::run(DFG const& _dfg)
 {
-	StackLayoutGenerator stackLayoutGenerator{_context};
+	StackLayout stackLayout;
+	StackLayoutGenerator stackLayoutGenerator{stackLayout};
 
-	stackLayoutGenerator.processEntryPoint(_context.dfg->entry);
-	for (auto& functionInfo: _context.dfg->functions | ranges::views::values)
+	stackLayoutGenerator.processEntryPoint(_dfg.entry);
+	for (auto& functionInfo: _dfg.functions | ranges::views::values)
 		stackLayoutGenerator.processEntryPoint(functionInfo.entry);
 
 	std::set<DFG::BasicBlock const*> visited;
-	stackLayoutGenerator.stitchTogether(*_context.dfg->entry, visited);
-	for (auto& functionInfo: _context.dfg->functions | ranges::views::values)
+	stackLayoutGenerator.stitchTogether(*_dfg.entry, visited);
+	for (auto& functionInfo: _dfg.functions | ranges::views::values)
 		stackLayoutGenerator.stitchTogether(*functionInfo.entry, visited);
+	return stackLayout;
 }

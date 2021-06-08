@@ -28,15 +28,24 @@
 namespace solidity::yul
 {
 
-struct OptimizedCodeTransformContext;
+struct StackLayout
+{
+	struct BlockInfo
+	{
+		Stack entryLayout;
+		Stack exitLayout;
+	};
+	std::map<DFG::BasicBlock const*, BlockInfo> blockInfos;
+	std::map<DFG::Operation const*, Stack> operationEntryStacks;
+};
 
 class StackLayoutGenerator
 {
 public:
-	static void run(OptimizedCodeTransformContext& _context);
+	static StackLayout run(DFG const& _dfg);
 
 private:
-	StackLayoutGenerator(OptimizedCodeTransformContext& _context);
+	StackLayoutGenerator(StackLayout& _context);
 
 	/// @returns the optimal entry stack layout, s.t. @a _operation can be applied to it and
 	/// the result can be transformed to @a _exitStack with minimal stack shuffling.
@@ -51,7 +60,7 @@ private:
 
 	static Stack combineStack(Stack const& _stack1, Stack const& _stack2);
 
-	OptimizedCodeTransformContext& m_context;
+	StackLayout& m_layout;
 };
 
 }

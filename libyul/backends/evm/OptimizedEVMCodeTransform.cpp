@@ -54,11 +54,12 @@ public:
 		AbstractAssembly& _assembly,
 		BuiltinContext& _builtinContext,
 		bool _useNamedLabelsForFunctions,
-		OptimizedCodeTransformContext const& _info,
+		DFG const& _dfg,
+		StackLayout const& _stackLayout,
 		DFG::BasicBlock const& _entry
 	)
 	{
-		CodeGenerator generator(_assembly, _builtinContext, _useNamedLabelsForFunctions,  _info);
+		CodeGenerator generator(_assembly, _builtinContext, _useNamedLabelsForFunctions,  _dfg, _stackLayout);
 		generator(_entry);
 		generator.generateStaged();
 
@@ -68,12 +69,14 @@ private:
 		AbstractAssembly& _assembly,
 		BuiltinContext& _builtinContext,
 		bool _useNamedLabelsForFunctions,
-		OptimizedCodeTransformContext const& _info
+		DFG const& _dfg,
+		StackLayout const& _stackLayout
 	):
 	m_assembly(_assembly),
 	m_builtinContext(_builtinContext),
 	m_useNamedLabelsForFunctions(_useNamedLabelsForFunctions),
-	m_info(_info)
+	m_dfg(_dfg),
+	m_stackLayout(_stackLayout)
 	{
 	}
 public:
@@ -98,7 +101,8 @@ private:
 	AbstractAssembly& m_assembly;
 	BuiltinContext& m_builtinContext;
 	bool m_useNamedLabelsForFunctions = true;
-	OptimizedCodeTransformContext const& m_info;
+	DFG const& m_dfg;
+	StackLayout const& m_stackLayout;
 	Stack m_stack;
 	std::map<yul::FunctionCall const*, AbstractAssembly::LabelID> m_returnLabels;
 	std::map<DFG::BasicBlock const*, AbstractAssembly::LabelID> m_blockLabels;
@@ -114,7 +118,7 @@ private:
 AbstractAssembly::LabelID CodeGenerator::getFunctionLabel(Scope::Function const& _function)
 {
 	ScopedSaveAndRestore restoreStack(m_stack, {});
-	DFG::FunctionInfo const& functionInfo = m_info.dfg->functions.at(&_function);
+	DFG::FunctionInfo const& functionInfo = m_dfg.functions.at(&_function);
 	if (!m_functionLabels.count(&functionInfo))
 	{
 		m_functionLabels[&functionInfo] = m_useNamedLabelsForFunctions ?
@@ -135,7 +139,7 @@ void CodeGenerator::operator()(DFG::FunctionInfo const& _functionInfo)
 	yulAssert(!m_currentFunctionInfo, "");
 	m_currentFunctionInfo = &_functionInfo;
 
-	BlockGenerationInfo const& info = m_info.blockInfos.at(_functionInfo.entry);
+	StackLayout::BlockInfo const& info = m_stackLayout.blockInfos.at(_functionInfo.entry);
 
 	DEBUG(cout << std::endl;)
 	DEBUG(cout << "F: start of function " << _functionInfo.function.name.str() << std::endl;)
@@ -247,7 +251,7 @@ void CodeGenerator::operator()(DFG::BasicBlock const& _block)
 		return;
 	m_generated.insert(&_block);
 
-	BlockGenerationInfo const& info = m_info.blockInfos.at(&_block);
+	StackLayout::BlockInfo const& info = m_stackLayout.blockInfos.at(&_block);
 
 	if (auto label = util::valueOrNullptr(m_blockLabels, &_block))
 		m_assembly.appendLabel(*label);
@@ -266,11 +270,8 @@ void CodeGenerator::operator()(DFG::BasicBlock const& _block)
 
 	for (auto const& operation: _block.operations)
 	{
-		OptimizedCodeTransformContext::OperationInfo const& operationInfo = m_info.operationStacks.at(&operation);
-		createStackLayout(operationInfo.entryStack);
+		createStackLayout(m_stackLayout.operationEntryStacks.at(&operation));
 		std::visit(*this, operation.operation);
-		// TODO: is this actually necessary each time? Last time is probably enough, if at all needed.
-		// createStackLayout(operationInfo.exitStack);
 	}
 	createStackLayout(info.exitLayout);
 
@@ -290,7 +291,7 @@ void CodeGenerator::operator()(DFG::BasicBlock const& _block)
 		{
 			DEBUG(cout << "F: JUMP EXIT TO: " << _jump.target << std::endl;)
 
-			BlockGenerationInfo const& targetInfo = m_info.blockInfos.at(_jump.target);
+			StackLayout::BlockInfo const& targetInfo = m_stackLayout.blockInfos.at(_jump.target);
 			DEBUG(cout << "F: CURRENT " << stackToString(m_stack) << " => " << stackToString(targetInfo.entryLayout) << std::endl;)
 			createStackLayout(targetInfo.entryLayout);
 			/*
@@ -319,7 +320,7 @@ void CodeGenerator::operator()(DFG::BasicBlock const& _block)
 				if (!m_blockLabels.count(_jump.target))
 					m_blockLabels[_jump.target] = m_assembly.newLabelId();
 
-				yulAssert(m_stack == m_info.blockInfos.at(_jump.target).entryLayout, "");
+				yulAssert(m_stack == m_stackLayout.blockInfos.at(_jump.target).entryLayout, "");
 				m_assembly.appendJumpTo(m_blockLabels[_jump.target]);
 				if (!m_generated.count(_jump.target))
 					m_stagedBlocks.emplace_back(_jump.target);
@@ -329,22 +330,22 @@ void CodeGenerator::operator()(DFG::BasicBlock const& _block)
 		{
 			DEBUG(cout << "F: CONDITIONAL JUMP EXIT TO: " << _conditionalJump.nonZero << " / " << _conditionalJump.zero << std::endl;)
 			DEBUG(cout << "F: CURRENT EXIT LAYOUT: " << stackToString(info.exitLayout) << std::endl;)
-			BlockGenerationInfo const& nonZeroInfo = m_info.blockInfos.at(_conditionalJump.nonZero);
+			StackLayout::BlockInfo const& nonZeroInfo = m_stackLayout.blockInfos.at(_conditionalJump.nonZero);
 			(void)nonZeroInfo;
-			BlockGenerationInfo const& zeroInfo = m_info.blockInfos.at(_conditionalJump.zero);
+			StackLayout::BlockInfo const& zeroInfo = m_stackLayout.blockInfos.at(_conditionalJump.zero);
 			(void)zeroInfo;
 			DEBUG(cout << "F: non-zero entry layout: " << stackToString(nonZeroInfo.entryLayout) << std::endl;)
 			DEBUG(cout << "F: zero entry layout: " << stackToString(zeroInfo.entryLayout) << std::endl;)
 
 			for (auto const* nonZeroEntry: _conditionalJump.nonZero->entries)
 			{
-				BlockGenerationInfo const& entryInfo = m_info.blockInfos.at(nonZeroEntry);
+				StackLayout::BlockInfo const& entryInfo = m_stackLayout.blockInfos.at(nonZeroEntry);
 				(void)entryInfo;
 				DEBUG(cout << "  F: non-zero entry exit: " << stackToString(entryInfo.exitLayout) << std::endl;)
 			}
 			for (auto const* zeroEntry: _conditionalJump.zero->entries)
 			{
-				BlockGenerationInfo const& entryInfo = m_info.blockInfos.at(zeroEntry);
+				StackLayout::BlockInfo const& entryInfo = m_stackLayout.blockInfos.at(zeroEntry);
 				(void)entryInfo;
 				DEBUG(cout << "  F: zero entry exit: " << stackToString(entryInfo.exitLayout) << std::endl;)
 			}
@@ -358,9 +359,9 @@ void CodeGenerator::operator()(DFG::BasicBlock const& _block)
 			m_assembly.appendJumpToIf(m_blockLabels[_conditionalJump.nonZero]);
 			m_stack.pop_back();
 			// TODO: assert this?
-			for (auto [stackSlot, entryLayoutSlot]: ranges::zip_view(m_stack, m_info.blockInfos.at(_conditionalJump.nonZero).entryLayout))
+			for (auto [stackSlot, entryLayoutSlot]: ranges::zip_view(m_stack, m_stackLayout.blockInfos.at(_conditionalJump.nonZero).entryLayout))
 				yulAssert(holds_alternative<JunkSlot>(entryLayoutSlot) || stackSlot == entryLayoutSlot, "");
-			for (auto [stackSlot, entryLayoutSlot]: ranges::zip_view(m_stack, m_info.blockInfos.at(_conditionalJump.zero).entryLayout))
+			for (auto [stackSlot, entryLayoutSlot]: ranges::zip_view(m_stack, m_stackLayout.blockInfos.at(_conditionalJump.zero).entryLayout))
 				yulAssert(holds_alternative<JunkSlot>(entryLayoutSlot) || stackSlot == entryLayoutSlot, "");
 
 			if (!m_generated.count(_conditionalJump.nonZero))
@@ -593,7 +594,7 @@ void CodeGenerator::generateStaged()
 	{
 		DFG::BasicBlock const* _block = *m_stagedBlocks.begin();
 		m_stagedBlocks.pop_front();
-		m_stack = m_info.blockInfos.at(_block).entryLayout;
+		m_stack = m_stackLayout.blockInfos.at(_block).entryLayout;
 		m_assembly.setStackHeight(static_cast<int>(m_stack.size()));
 		(*this)(*_block);
 		// TODO: assert that this block jumped at exit.
@@ -615,7 +616,7 @@ void CodeGenerator::generateStaged()
 			{
 				DFG::BasicBlock const* _block = *m_stagedBlocks.begin();
 				m_stagedBlocks.pop_front();
-				m_stack = m_info.blockInfos.at(_block).entryLayout;
+				m_stack = m_stackLayout.blockInfos.at(_block).entryLayout;
 				m_assembly.setStackHeight(static_cast<int>(m_stack.size()));
 				(*this)(*_block);
 				// TODO: assert that this block jumped at exit.
@@ -635,18 +636,15 @@ void OptimizedCodeTransform::run(
 	bool _useNamedLabelsForFunctions
 )
 {
-	OptimizedCodeTransformContext context{
-		DataFlowGraphBuilder::build(_analysisInfo, _dialect, _block),
-		{},
-		{}
-	};
+
+	std::unique_ptr<DFG> dfg = DataFlowGraphBuilder::build(_analysisInfo, _dialect, _block);
 	DEBUG(cout << std::endl << std::endl;)
 	DEBUG(cout << "GENERATE STACK LAYOUTS" << std::endl;)
 	DEBUG(cout << std::endl << std::endl;)
-	StackLayoutGenerator::run(context);
+	StackLayout stackLayout = StackLayoutGenerator::run(*dfg);
 
 	DEBUG(cout << std::endl << std::endl;)
 	DEBUG(cout << "FORWARD CODEGEN" << std::endl;)
 	DEBUG(cout << std::endl << std::endl;)
-	CodeGenerator::run(_assembly, _builtinContext, _useNamedLabelsForFunctions, context, *context.dfg->entry);
+	CodeGenerator::run(_assembly, _builtinContext, _useNamedLabelsForFunctions, *dfg, stackLayout, *dfg->entry);
 }

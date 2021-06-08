@@ -40,24 +40,6 @@ namespace solidity::yul
 {
 struct AsmAnalysisInfo;
 
-struct BlockGenerationInfo
-{
-	Stack entryLayout{};
-	Stack exitLayout{};
-};
-struct OptimizedCodeTransformContext
-{
-	std::unique_ptr<DFG> dfg;
-	std::map<DFG::BasicBlock const*, BlockGenerationInfo> blockInfos;
-	struct OperationInfo
-	{
-		Stack entryStack;
-		/// Probably not necessary and to be removed.
-		Stack exitStack;
-	};
-	std::map<DFG::Operation const*, OperationInfo> operationStacks;
-};
-
 class OptimizedCodeTransform
 {
 public:
