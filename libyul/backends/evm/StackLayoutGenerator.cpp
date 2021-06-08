@@ -51,32 +51,6 @@ StackLayoutGenerator::StackLayoutGenerator(OptimizedCodeTransformContext& _conte
 
 }
 
-void StackLayoutGenerator::operator()(DFG::FunctionCall const& _call)
-{
-	(void)_call;
-	DEBUG(cout << "B: function call " << _call.functionCall.get().functionName.name.str() << ": " << stackToString(*m_stack) << std::endl;)
-}
-
-void StackLayoutGenerator::operator()(DFG::BuiltinCall const& _call)
-{
-	(void)_call;
-	DEBUG(cout << "B: bultin call " << _call.functionCall.get().functionName.name.str() << ": " << stackToString(*m_stack) << std::endl;)
-}
-
-void StackLayoutGenerator::operator()(DFG::Assignment const& _assignment)
-{
-	for (auto& stackSlot: *m_stack)
-		if (auto const* varSlot = get_if<VariableSlot>(&stackSlot))
-			if (util::findOffset(_assignment.variables, *varSlot))
-				stackSlot = JunkSlot{};
-	DEBUG(
-		cout << "B: assignment (";
-		for (auto var: _assignment.variables)
-			cout << var.variable.get().name.str() << " ";
-		cout << ") pre: " << stackToString(*m_stack) << std::endl;
-	)
-}
-
 namespace
 {
 struct PreviousSlot { size_t slot; };
@@ -141,15 +115,15 @@ Stack createIdealLayout(Stack const& post, vector<variant<PreviousSlot, set<unsi
 }
 }
 
-void StackLayoutGenerator::operator()(DFG::Operation const& _operation)
+Stack StackLayoutGenerator::determineOptimalLayoutBeforeOperation(Stack _exitStack, DFG::Operation const& _operation)
 {
-	yulAssert(m_stack, "");
-
 	OptimizedCodeTransformContext::OperationInfo& operationInfo = m_context.operationStacks[&_operation];
-	operationInfo.exitStack = *m_stack;
+	operationInfo.exitStack = _exitStack;
+
+	Stack& stack = _exitStack;
 
 	DEBUG(
-		cout << "OPERATION post:   " << stackToString(*m_stack) << std::endl
+		cout << "OPERATION post:   " << stackToString(stack) << std::endl
 			<< "          input:  " << stackToString(_operation.input) << std::endl
 			<< "          output: " << stackToString(_operation.output) << std::endl;
 	)
@@ -158,7 +132,7 @@ void StackLayoutGenerator::operator()(DFG::Operation const& _operation)
 	size_t numToKeep = 0;
 	for (size_t idx: ranges::views::iota(0u, targetPositions.size()))
 	{
-		auto offsets = findAllOffsets(*m_stack, _operation.output.at(idx));
+		auto offsets = findAllOffsets(stack, _operation.output.at(idx));
 		for (unsigned offset: offsets)
 		{
 			targetPositions[idx].emplace(offset);
@@ -169,45 +143,57 @@ void StackLayoutGenerator::operator()(DFG::Operation const& _operation)
 
 	vector<variant<PreviousSlot, set<unsigned>>> layout;
 	size_t idx = 0;
-	for (auto slot: *m_stack | ranges::views::drop_last(numToKeep))
+	for (auto slot: stack | ranges::views::drop_last(numToKeep))
 	{
 		layout.emplace_back(PreviousSlot{idx++});
 	}
 	// The call produces values with known target positions.
 	layout += targetPositions;
 
-	*m_stack = createIdealLayout(*m_stack, layout);
+	stack = createIdealLayout(stack, layout);
 
-	std::visit(*this, _operation.operation);
+	if (auto const* assignment = get_if<DFG::Assignment>(&_operation.operation))
+	{
+		for (auto& stackSlot: stack)
+			if (auto const* varSlot = get_if<VariableSlot>(&stackSlot))
+				if (util::findOffset(assignment->variables, *varSlot))
+					stackSlot = JunkSlot{};
+		DEBUG(
+			cout << "B: assignment (";
+			for (auto var: assignment->variables)
+				cout << var.variable.get().name.str() << " ";
+			cout << ") pre: " << stackToString(stack) << std::endl;
+		)
+	}
 
 	for (StackSlot const& input: _operation.input)
-		m_stack->emplace_back(input);
+		stack.emplace_back(input);
 
-	operationInfo.entryStack = *m_stack;
+	operationInfo.entryStack = stack;
 
-	DEBUG(cout << "Operation pre before compress: " << stackToString(*m_stack) << std::endl;)
+	DEBUG(cout << "Operation pre before compress: " << stackToString(stack) << std::endl;)
 
 	// TODO: We will potentially accumulate a lot of return labels here.
 	// Removing them naively has huge implications on both code size and runtime gas cost (both positive and negative):
 	//   cxx20::erase_if(*m_stack, [](StackSlot const& _slot) { return holds_alternative<FunctionCallReturnLabelSlot>(_slot); });
 	// Consider removing them properly while accounting for the induced backwards stack shuffling.
 
-	for (auto&& [idx, slot]: *m_stack | ranges::views::enumerate | ranges::views::reverse)
+	for (auto&& [idx, slot]: stack | ranges::views::enumerate | ranges::views::reverse)
 		// We can always push literals, junk and function call return labels.
 		if (holds_alternative<LiteralSlot>(slot) || holds_alternative<JunkSlot>(slot) || holds_alternative<FunctionCallReturnLabelSlot>(slot))
-			m_stack->pop_back(); // TODO: verify that this is fine during range traversal
+			stack.pop_back(); // TODO: verify that this is fine during range traversal
 		// We can always dup values already on stack.
-		else if (util::findOffset(*m_stack | ranges::views::take(idx), slot))
-			m_stack->pop_back();
+		else if (util::findOffset(stack | ranges::views::take(idx), slot))
+			stack.pop_back();
 		else
 			break;
-	DEBUG(cout << "Operation pre after compress: " << stackToString(*m_stack) << "   " << m_stack << std::endl;)
+	DEBUG(cout << "Operation pre after compress: " << stackToString(stack) << std::endl;)
 
 	// TODO: suboptimal. Should account for induced stack shuffling.
-	if (m_stack->size() > 12)
+	if (stack.size() > 12)
 	{
 		Stack newStack;
-		for (auto slot: *m_stack)
+		for (auto slot: stack)
 		{
 			if (holds_alternative<LiteralSlot>(slot) || holds_alternative<FunctionCallReturnLabelSlot>(slot))
 				continue;
@@ -215,8 +201,9 @@ void StackLayoutGenerator::operator()(DFG::Operation const& _operation)
 				continue;
 			newStack.emplace_back(slot);
 		}
-		*m_stack = newStack;
+		stack = newStack;
 	}
+	return stack;
 }
 
 Stack StackLayoutGenerator::operator()(DFG::BasicBlock const& _block, Stack _initialExitLayout)
@@ -247,13 +234,13 @@ Stack StackLayoutGenerator::operator()(DFG::BasicBlock const& _block, Stack _ini
 	m_initialExitLayoutOnLastVisit[&_block] = _initialExitLayout;
 
 
-	ScopedSaveAndRestore stackRestore(m_stack, nullptr);
 	BlockGenerationInfo& info = m_context.blockInfos[&_block];
 
 	Stack currentStack = _initialExitLayout;
 
 	DEBUG(cout << "Block: " << &_block << std::endl;)
 
+	// make this return layout.
 	std::visit(util::GenericVisitor{
 		[&](DFG::BasicBlock::MainExit const&)
 		{
@@ -331,13 +318,12 @@ Stack StackLayoutGenerator::operator()(DFG::BasicBlock const& _block, Stack _ini
 
 	DEBUG(cout << "B: BLOCK: " << &_block << std::endl;)
 
-	m_stack = &currentStack;
 	info.exitLayout = currentStack;
 
 	DEBUG(cout << "B: EXIT LAYOUT (" << &_block << "): " << stackToString(currentStack) << std::endl;)
 
 	for (auto& operation: _block.operations | ranges::views::reverse)
-		(*this)(operation);
+		currentStack = determineOptimalLayoutBeforeOperation(currentStack, operation);
 
 	DEBUG(cout << "B: ENTRY LAYOUT (" << &_block << "): " << stackToString(currentStack) << std::endl;)
 

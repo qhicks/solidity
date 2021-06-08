@@ -15,6 +15,9 @@
 	along with solidity.  If not, see <http://www.gnu.org/licenses/>.
 */
 // SPDX-License-Identifier: GPL-3.0
+/**
+ * Data flow graph and stack layout structures used during code generation.
+ */
 
 #pragma once
 
@@ -62,10 +65,13 @@ struct LiteralSlot
 /// A slot containing the idx-th return value of a previous call.
 struct TemporarySlot
 {
+	/// The call that returned this slot.
 	std::reference_wrapper<yul::FunctionCall const> call;
-	size_t idx = 0;
-	bool operator==(TemporarySlot const& _rhs) const { return &call.get() == &_rhs.call.get() && idx == _rhs.idx; }
-	bool operator<(TemporarySlot const& _rhs) const { return std::make_pair(&call.get(), idx) < std::make_pair(&_rhs.call.get(), _rhs.idx); }
+	/// Specifies to which of the values returned by the call this slot refers.
+	/// index == 0 refers to the slot deepest in the stack after the call.
+	size_t index = 0;
+	bool operator==(TemporarySlot const& _rhs) const { return &call.get() == &_rhs.call.get() && index == _rhs.index; }
+	bool operator<(TemporarySlot const& _rhs) const { return std::make_pair(&call.get(), index) < std::make_pair(&_rhs.call.get(), _rhs.index); }
 };
 /// A slot containing an arbitrary value that is always eventually popped and never used.
 /// Used to maintain stack balance on control flow joins.

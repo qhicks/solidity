@@ -15,6 +15,10 @@
 	along with solidity.  If not, see <http://www.gnu.org/licenses/>.
 */
 // SPDX-License-Identifier: GPL-3.0
+/**
+ * Transformation of a Yul AST into a data flow graph.
+ */
+
 #include <libyul/backends/evm/DataFlowGraphBuilder.h>
 #include <libyul/AST.h>
 #include <libyul/Utilities.h>

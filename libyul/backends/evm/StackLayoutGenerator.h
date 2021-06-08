@@ -37,11 +37,9 @@ public:
 
 	Stack operator()(DFG::BasicBlock const& _block, Stack _initialExitLayout);
 
-	void operator()(DFG::Operation const& _operation);
-
-	void operator()(DFG::BuiltinCall const& _builtinCall);
-	void operator()(DFG::FunctionCall const& _functionCall);
-	void operator()(DFG::Assignment const& _literal);
+	/// @returns the optimal entry stack layout, s.t. @a _operation can be applied to it and
+	/// the result can be transformed to @a _exitStack with minimal stack shuffling.
+	Stack determineOptimalLayoutBeforeOperation(Stack _exitStack, DFG::Operation const& _operation);
 
 private:
 	StackLayoutGenerator(OptimizedCodeTransformContext& _context);
@@ -49,8 +47,6 @@ private:
 	void stitchTogether(DFG::BasicBlock& _block, std::set<DFG::BasicBlock const*>& _visited);
 
 	OptimizedCodeTransformContext& m_context;
-
-	Stack* m_stack;
 
 	// TODO: name!
 	std::map<DFG::BasicBlock const*, Stack> m_initialExitLayoutOnLastVisit;
