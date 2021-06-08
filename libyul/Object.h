@@ -92,6 +92,9 @@ public:
 	std::vector<std::shared_ptr<ObjectNode>> subObjects;
 	std::map<YulString, size_t> subIndexByName;
 	std::shared_ptr<yul::AsmAnalysisInfo> analysisInfo;
+
+	/// @returns the name of the special metadata data object.
+	static std::string metadataName() { return ".metadata"; }
 };
 
 }

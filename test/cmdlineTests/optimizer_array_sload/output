@@ -60,5 +60,6 @@ object "Arraysum_34" {
                 revert(0, 0x24)
             }
         }
+        data ".metadata" hex"a164736f6c6343000805000a"
     }
 }

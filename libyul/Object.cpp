@@ -69,7 +69,8 @@ set<YulString> Object::qualifiedDataNames() const
 	for (shared_ptr<ObjectNode> const& subObjectNode: subObjects)
 	{
 		yulAssert(qualifiedNames.count(subObjectNode->name) == 0, "");
-		qualifiedNames.insert(subObjectNode->name);
+		if (subObjectNode->name.str() != metadataName() || !dynamic_cast<Data const*>(subObjectNode.get()))
+			qualifiedNames.insert(subObjectNode->name);
 		if (auto const* subObject = dynamic_cast<Object const*>(subObjectNode.get()))
 			for (YulString const& subSubObj: subObject->qualifiedDataNames())
 				if (subObject->name != subSubObj)

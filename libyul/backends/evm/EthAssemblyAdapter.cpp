@@ -161,6 +161,11 @@ AbstractAssembly::SubID EthAssemblyAdapter::appendData(bytes const& _data)
 	return subID;
 }
 
+void EthAssemblyAdapter::appendAuxiliaryDataToEnd(bytes const& _data)
+{
+	m_assembly.appendAuxiliaryDataToEnd(_data);
+}
+
 void EthAssemblyAdapter::appendImmutable(std::string const& _identifier)
 {
 	m_assembly.appendImmutable(_identifier);
