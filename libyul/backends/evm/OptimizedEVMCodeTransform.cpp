@@ -270,7 +270,7 @@ void CodeGenerator::operator()(DFG::BasicBlock const& _block)
 
 	for (auto const& operation: _block.operations)
 	{
-		createStackLayout(m_stackLayout.operationEntryStacks.at(&operation));
+		createStackLayout(m_stackLayout.operationEntryLayout.at(&operation));
 		std::visit(*this, operation.operation);
 	}
 	createStackLayout(info.exitLayout);

@@ -36,7 +36,7 @@ struct StackLayout
 		Stack exitLayout;
 	};
 	std::map<DFG::BasicBlock const*, BlockInfo> blockInfos;
-	std::map<DFG::Operation const*, Stack> operationEntryStacks;
+	std::map<DFG::Operation const*, Stack> operationEntryLayout;
 };
 
 class StackLayoutGenerator
@@ -49,15 +49,24 @@ private:
 
 	/// @returns the optimal entry stack layout, s.t. @a _operation can be applied to it and
 	/// the result can be transformed to @a _exitStack with minimal stack shuffling.
-	Stack determineOptimalLayoutBeforeOperation(Stack _exitStack, DFG::Operation const& _operation);
+	Stack propagateStackThroughOperation(Stack _exitStack, DFG::Operation const& _operation);
 
 	/// @returns the desired stack layout at the entry of @a _block, assuming the layout after
 	/// executing the block should be @a _exitStack.
-	Stack determineBlockEntry(Stack _exitStack, DFG::BasicBlock const& _block);
+	Stack propagateStackThroughBlock(Stack _exitStack, DFG::BasicBlock const& _block);
 
+	/// Main algorithm walking the graph from entry to exit and propagating back the stack layouts to the entries.
+	/// Iteratively reruns itself along backwards jumps until the layout is stabilized.
 	void processEntryPoint(DFG::BasicBlock const* _entry);
-	void stitchTogether(DFG::BasicBlock& _block, std::set<DFG::BasicBlock const*>& _visited);
 
+	/// After the main algorithms, layouts at conditional jumps are merely compatible, i.e. the exit layout of the
+	/// jumping block is a superset of the entry layout of the target block. This function modifies the entry layouts
+	/// of conditional jump targets, s.t. the entry layout of target blocks match the exit layout of the jumping block
+	/// exactly, except that slots not required after the jump are marked as `JunkSlot`s.
+	void stitchConditionalJumps(DFG::BasicBlock& _block);
+
+	/// Calculates the ideal stack layout, s.t. both @a _stack1 and @a _stack2 can be achieved with minimal
+	/// stack shuffling when starting from the returned layout.
 	static Stack combineStack(Stack const& _stack1, Stack const& _stack2);
 
 	StackLayout& m_layout;

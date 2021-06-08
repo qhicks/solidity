@@ -24,6 +24,7 @@
 #include <libyul/backends/evm/StackHelpers.h>
 #include <libyul/backends/evm/OptimizedEVMCodeTransform.h>
 
+#include <libsolutil/Algorithms.h>
 #include <libsolutil/cxx20.h>
 #include <libsolutil/Permutations.h>
 #include <libsolutil/Visitor.h>
@@ -57,14 +58,14 @@ struct PreviousSlot { size_t slot; };
 
 Stack createIdealLayout(Stack const& post, vector<variant<PreviousSlot, set<unsigned>>> layout)
 {
-// TODO: argue that util::permuteDup works with this kind of _getTargetPosition.
-// Or even better... rewrite this as custom algorithm matching createStackLayout exactly and make it work
-// for all cases, including duplicates and removals of slots that can be generated on the fly, etc.
+	// TODO: argue that util::permuteDup works with this kind of _getTargetPosition.
+	// Or even better... rewrite this as custom algorithm matching createStackLayout exactly and make it work
+	// for all cases, including duplicates and removals of slots that can be generated on the fly, etc.
 	util::permuteDup(static_cast<unsigned>(layout.size()), [&](unsigned _i) -> set<unsigned> {
-// For call return values the target position is known.
+		// For call return values the target position is known.
 		if (set<unsigned>* pos = get_if<set<unsigned>>(&layout.at(_i)))
 			return *pos;
-// Previous arguments can stay where they are.
+		// Previous arguments can stay where they are.
 		return {_i};
 	}, [&](unsigned _i) {
 		std::swap(layout.back(), layout.at(layout.size() - _i - 1));
@@ -97,9 +98,9 @@ Stack createIdealLayout(Stack const& post, vector<variant<PreviousSlot, set<unsi
 		layout.pop_back();
 	});
 
-// Now we can construct the ideal layout before the operation.
-// "layout" has the declared variables in the desired position and
-// for any PreviousSlot{x}, x yields the ideal place of the slot before the declaration.
+	// Now we can construct the ideal layout before the operation.
+	// "layout" has the declared variables in the desired position and
+	// for any PreviousSlot{x}, x yields the ideal place of the slot before the declaration.
 	vector<optional<StackSlot>> idealLayout(post.size(), nullopt);
 	for (auto const& [slot, idealPosition]: ranges::zip_view(post, layout))
 		if (PreviousSlot* previousSlot = std::get_if<PreviousSlot>(&idealPosition))
@@ -115,7 +116,7 @@ Stack createIdealLayout(Stack const& post, vector<variant<PreviousSlot, set<unsi
 }
 }
 
-Stack StackLayoutGenerator::determineOptimalLayoutBeforeOperation(Stack _exitStack, DFG::Operation const& _operation)
+Stack StackLayoutGenerator::propagateStackThroughOperation(Stack _exitStack, DFG::Operation const& _operation)
 {
 	Stack& stack = _exitStack;
 
@@ -166,7 +167,7 @@ Stack StackLayoutGenerator::determineOptimalLayoutBeforeOperation(Stack _exitSta
 	for (StackSlot const& input: _operation.input)
 		stack.emplace_back(input);
 
-	m_layout.operationEntryStacks[&_operation] = stack;
+	m_layout.operationEntryLayout[&_operation] = stack;
 
 	DEBUG(cout << "Operation pre before compress: " << stackToString(stack) << std::endl;)
 
@@ -203,11 +204,11 @@ Stack StackLayoutGenerator::determineOptimalLayoutBeforeOperation(Stack _exitSta
 	return stack;
 }
 
-Stack StackLayoutGenerator::determineBlockEntry(Stack _exitStack, DFG::BasicBlock const& _block)
+Stack StackLayoutGenerator::propagateStackThroughBlock(Stack _exitStack, DFG::BasicBlock const& _block)
 {
 	Stack stack = std::move(_exitStack);
 	for (auto& operation: _block.operations | ranges::views::reverse)
-		stack = determineOptimalLayoutBeforeOperation(stack, operation);
+		stack = propagateStackThroughOperation(stack, operation);
 	return stack;
 }
 
@@ -292,7 +293,7 @@ void StackLayoutGenerator::processEntryPoint(DFG::BasicBlock const* _entry)
 					continue;*/
 			auto& info = m_layout.blockInfos[block];
 			info.exitLayout = *exitLayout;
-			info.entryLayout = determineBlockEntry(info.exitLayout, *block);
+			info.entryLayout = propagateStackThroughBlock(info.exitLayout, *block);
 
 			for (auto entry: block->entries)
 				toVisit.emplace_back(entry);
@@ -409,55 +410,47 @@ Stack StackLayoutGenerator::combineStack(Stack const& _stack1, Stack const& _sta
 	return commonPrefix;
 }
 
-void StackLayoutGenerator::stitchTogether(DFG::BasicBlock& _block, std::set<DFG::BasicBlock const*>& _visited)
+void StackLayoutGenerator::stitchConditionalJumps(DFG::BasicBlock& _block)
 {
-	if (_visited.count(&_block))
-		return;
-	_visited.insert(&_block);
-	auto& info = m_layout.blockInfos.at(&_block);
-	std::visit(util::GenericVisitor{
-		[&](DFG::BasicBlock::MainExit const&)
-		{
-		},
-		[&](DFG::BasicBlock::Jump const& _jump)
-		{
-			/*auto& targetInfo = context.blockInfos.at(_jump.target);
-			// TODO: Assert correctness, resp. achievability of layout.
-			targetInfo.entryLayout = info.exitLayout;*/
-			if (!_jump.backwards)
-				stitchTogether(*_jump.target, _visited);
-		},
-		[&](DFG::BasicBlock::ConditionalJump const& _conditionalJump)
-		{
-			auto& zeroTargetInfo = m_layout.blockInfos.at(_conditionalJump.zero);
-			auto& nonZeroTargetInfo = m_layout.blockInfos.at(_conditionalJump.nonZero);
-			// TODO: Assert correctness, resp. achievability of layout.
-			Stack exitLayout = info.exitLayout;
-			yulAssert(!exitLayout.empty(), "");
-			exitLayout.pop_back();
+	util::BreadthFirstSearch<DFG::BasicBlock*> breadthFirstSearch{{&_block}};
+	breadthFirstSearch.run([&](DFG::BasicBlock* _block, auto _addChild) {
+		auto& info = m_layout.blockInfos.at(_block);
+		std::visit(util::GenericVisitor{
+			[&](DFG::BasicBlock::MainExit const&) {},
+			[&](DFG::BasicBlock::Jump const& _jump)
 			{
-				Stack newZeroEntryLayout = exitLayout;
-				for (auto& slot: newZeroEntryLayout)
-					if (!util::findOffset(zeroTargetInfo.entryLayout, slot))
-						slot = JunkSlot{};
-				zeroTargetInfo.entryLayout = newZeroEntryLayout;
-			}
+				if (!_jump.backwards)
+					_addChild(_jump.target);
+			},
+			[&](DFG::BasicBlock::ConditionalJump const& _conditionalJump)
 			{
-				Stack newNonZeroEntryLayout = exitLayout;
-				for (auto& slot: newNonZeroEntryLayout)
-					if (!util::findOffset(nonZeroTargetInfo.entryLayout, slot))
-						slot = JunkSlot{};
-				nonZeroTargetInfo.entryLayout = newNonZeroEntryLayout;
-			}
-			stitchTogether(*_conditionalJump.zero, _visited);
-			stitchTogether(*_conditionalJump.nonZero, _visited);
-		},
-		[&](DFG::BasicBlock::FunctionReturn const&)
-		{
-		},
-		[&](DFG::BasicBlock::Terminated const&) { },
-	}, _block.exit);
-
+				auto& zeroTargetInfo = m_layout.blockInfos.at(_conditionalJump.zero);
+				auto& nonZeroTargetInfo = m_layout.blockInfos.at(_conditionalJump.nonZero);
+				// TODO: Assert correctness, resp. achievability of layout.
+				Stack exitLayout = info.exitLayout;
+				yulAssert(!exitLayout.empty(), "");
+				exitLayout.pop_back();
+				{
+					Stack newZeroEntryLayout = exitLayout;
+					for (auto& slot: newZeroEntryLayout)
+						if (!util::findOffset(zeroTargetInfo.entryLayout, slot))
+							slot = JunkSlot{};
+					zeroTargetInfo.entryLayout = newZeroEntryLayout;
+				}
+				{
+					Stack newNonZeroEntryLayout = exitLayout;
+					for (auto& slot: newNonZeroEntryLayout)
+						if (!util::findOffset(nonZeroTargetInfo.entryLayout, slot))
+							slot = JunkSlot{};
+					nonZeroTargetInfo.entryLayout = newNonZeroEntryLayout;
+				}
+				_addChild(_conditionalJump.zero);
+				_addChild(_conditionalJump.nonZero);
+			},
+			[&](DFG::BasicBlock::FunctionReturn const&)	{},
+			[&](DFG::BasicBlock::Terminated const&) { },
+		}, _block->exit);
+	});
 }
 
 StackLayout StackLayoutGenerator::run(DFG const& _dfg)
@@ -470,8 +463,8 @@ StackLayout StackLayoutGenerator::run(DFG const& _dfg)
 		stackLayoutGenerator.processEntryPoint(functionInfo.entry);
 
 	std::set<DFG::BasicBlock const*> visited;
-	stackLayoutGenerator.stitchTogether(*_dfg.entry, visited);
+	stackLayoutGenerator.stitchConditionalJumps(*_dfg.entry);
 	for (auto& functionInfo: _dfg.functions | ranges::views::values)
-		stackLayoutGenerator.stitchTogether(*functionInfo.entry, visited);
+		stackLayoutGenerator.stitchConditionalJumps(*functionInfo.entry);
 	return stackLayout;
 }
