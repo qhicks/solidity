@@ -44,17 +44,6 @@ using namespace solidity;
 using namespace solidity::yul;
 using namespace std;
 
-// TODO: if this is generally useful, promote to libsolutil - otherwise, remove and inline the ranges::views::transform.
-template<auto>
-struct MemberTransform;
-template<typename T, typename C, T C::*ptr>
-struct MemberTransform<ptr>
-{
-	static constexpr auto transform = ranges::views::transform([](auto&& _c) { return _c.*ptr; });
-};
-template<auto ptr>
-static constexpr auto member_view = MemberTransform<ptr>::transform;
-
 std::unique_ptr<DFG> DataFlowGraphBuilder::build(
 	AsmAnalysisInfo& _analysisInfo,
 	EVMDialect const& _dialect,
@@ -69,10 +58,10 @@ std::unique_ptr<DFG> DataFlowGraphBuilder::build(
 	builder(_block);
 
 	// Determine which blocks are reachable from the entry.
-	util::BreadthFirstSearch<DFG::BasicBlock*> reachabilityCheck{ranges::views::concat(
-		ranges::views::single(result->entry),
-		result->functionInfo | ranges::views::values | member_view<&DFG::FunctionInfo::entry>
-	) | ranges::to<list<DFG::BasicBlock*>>};
+	util::BreadthFirstSearch<DFG::BasicBlock*> reachabilityCheck{{result->entry}};
+	reachabilityCheck.verticesToTraverse += result->functionInfo | ranges::views::values | ranges::views::transform(
+		[](auto&& _function) { return _function.entry; }
+	);
 	reachabilityCheck.run([&](DFG::BasicBlock* _node, auto&& _addChild) {
 		visit(util::GenericVisitor{
 			[&](DFG::BasicBlock::Jump& _jump) {
@@ -163,8 +152,8 @@ DFG::Operation& DataFlowGraphBuilder::visitFunctionCall(FunctionCall const& _cal
 		yulAssert(function, "");
 		DFG::Operation& operation = m_currentBlock->operations.emplace_back(DFG::Operation{
 			// input
-			ranges::views::concat(
-				ranges::views::single(FunctionCallReturnLabelSlot{_call}),
+			ranges::concat_view(
+				ranges::views::single(StackSlot{FunctionCallReturnLabelSlot{_call}}),
 				_call.arguments | ranges::views::reverse | ranges::views::transform(std::ref(*this))
 			) | ranges::to<Stack>,
 			// output
