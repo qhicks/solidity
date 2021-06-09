@@ -29,6 +29,7 @@
 #include <libyul/optimiser/SSAValueTracker.h>
 #include <libyul/optimiser/Semantics.h>
 #include <libyul/optimiser/CallGraphGenerator.h>
+#include <libyul/backends/evm/EVMDialect.h>
 #include <libyul/Exceptions.h>
 #include <libyul/AST.h>
 #include <libyul/Dialect.h>
@@ -179,9 +180,13 @@ bool FullInliner::shallInline(FunctionCall const& _funCall, YulString _callSite)
 	if (m_pass == Pass::InlineTiny)
 		return false;
 
-/*	// Do not inline into already big functions.
-	if (m_functionSizes.at(_callSite) > 45)
-		return false;*/
+	// Do not inline into already big functions.
+	if (
+		auto evmDialect = dynamic_cast<EVMDialect const*>(&m_dialect);
+		!evmDialect || !evmDialect->providesObjectAccess()
+	)
+		if (m_functionSizes.at(_callSite) > 45)
+			return false;
 
 	if (m_singleUse.count(calledFunction->name))
 		return true;
