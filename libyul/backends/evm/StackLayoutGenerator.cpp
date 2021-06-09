@@ -442,7 +442,7 @@ void StackLayoutGenerator::fixStackTooDeep(DFG::BasicBlock& _block)
 			auto unreachable = OptimizedEVMCodeTransform::tryCreateStackLayout(stack, operationEntry);
 			if (!unreachable.empty())
 			{
-				std::cout << "UNREACHABLE SLOTS DURING OPEARTION ENTRY: " << stackToString(unreachable) << std::endl;
+				std::cout << "UNREACHABLE SLOTS DURING OPERATION ENTRY: " << stackToString(unreachable) << std::endl;
 				std::cout << "ATTEMPTING AD HOC FIX" << std::endl;
 				for (auto& op: (_block->operations | ranges::views::take(index)) | ranges::views::reverse)
 				{
@@ -456,7 +456,7 @@ void StackLayoutGenerator::fixStackTooDeep(DFG::BasicBlock& _block)
 				}
 			}
 			stack = operationEntry;
-			for(size_t i = 0; i < operation.input.size(); i++)
+			for (size_t i = 0; i < operation.input.size(); i++)
 				stack.pop_back();
 			stack += operation.output;
 		}
