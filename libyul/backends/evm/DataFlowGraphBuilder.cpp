@@ -72,7 +72,7 @@ std::unique_ptr<DFG> DataFlowGraphBuilder::build(
 	util::BreadthFirstSearch<DFG::BasicBlock*> reachabilityCheck{ranges::views::concat(
 		ranges::views::single(result->entry),
 		result->functionInfo | ranges::views::values | member_view<&DFG::FunctionInfo::entry>
-	) | ranges::to<list>};
+	) | ranges::to<list<DFG::BasicBlock*>>};
 	reachabilityCheck.run([&](DFG::BasicBlock* _node, auto&& _addChild) {
 		visit(util::GenericVisitor{
 			[&](DFG::BasicBlock::Jump& _jump) {
