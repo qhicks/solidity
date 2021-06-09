@@ -218,9 +218,12 @@ void StackToMemoryMover::operator()(Block& _block)
 		{
 			FunctionCall const* functionCall = get_if<FunctionCall>(_stmt.value.get());
 			yulAssert(functionCall, "");
-			rhsMemorySlots = m_functionReturnVariables.at(functionCall->functionName.name) |
-				ranges::views::transform(m_memoryOffsetTracker) |
-				ranges::to<vector<optional<YulString>>>;
+			if (m_context.dialect.builtin(functionCall->functionName.name))
+				rhsMemorySlots = vector<optional<YulString>>(_lhsVars.size(), nullopt);
+			else
+				rhsMemorySlots = m_functionReturnVariables.at(functionCall->functionName.name) |
+					ranges::views::transform(m_memoryOffsetTracker) |
+					ranges::to<vector<optional<YulString>>>;
 		}
 		else
 			rhsMemorySlots = vector<optional<YulString>>(_lhsVars.size(), nullopt);
