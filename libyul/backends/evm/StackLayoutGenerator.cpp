@@ -21,6 +21,7 @@
 
 #include <libyul/backends/evm/StackLayoutGenerator.h>
 
+#include <libyul/backends/evm/OptimizedEVMCodeTransform.h>
 #include <libyul/backends/evm/StackHelpers.h>
 
 #include <libsolutil/Algorithms.h>
@@ -30,11 +31,14 @@
 
 #include <range/v3/algorithm/any_of.hpp>
 #include <range/v3/range/conversion.hpp>
+#include <range/v3/view/all.hpp>
+#include <range/v3/view/concat.hpp>
 #include <range/v3/view/drop.hpp>
 #include <range/v3/view/drop_last.hpp>
 #include <range/v3/view/map.hpp>
 #include <range/v3/view/reverse.hpp>
 #include <range/v3/view/take.hpp>
+#include <range/v3/view/take_last.hpp>
 #include <range/v3/view/transform.hpp>
 
 using namespace solidity;
@@ -424,6 +428,92 @@ void StackLayoutGenerator::stitchConditionalJumps(DFG::BasicBlock& _block)
 	});
 }
 
+void StackLayoutGenerator::fixStackTooDeep(DFG::BasicBlock& _block)
+{
+	// This is just an initial proof of concept. Doing this in a clever way and in all cases will take some doing.
+	util::BreadthFirstSearch<DFG::BasicBlock*> breadthFirstSearch{{&_block}};
+	breadthFirstSearch.run([&](DFG::BasicBlock* _block, auto _addChild) {
+		Stack stack;
+		stack = m_layout.blockInfos.at(_block).entryLayout;
+
+		for (auto&& [index, operation]: _block->operations | ranges::views::enumerate)
+		{
+			Stack& operationEntry = m_layout.operationEntryLayout.at(&operation);
+			auto unreachable = OptimizedEVMCodeTransform::tryCreateStackLayout(stack, operationEntry);
+			if (!unreachable.empty())
+			{
+				std::cout << "UNREACHABLE SLOTS DURING OPEARTION ENTRY: " << stackToString(unreachable) << std::endl;
+				std::cout << "ATTEMPTING AD HOC FIX" << std::endl;
+				for (auto& op: (_block->operations | ranges::views::take(index)) | ranges::views::reverse)
+				{
+					Stack& opEntry = m_layout.operationEntryLayout.at(&op);
+					Stack newStack = ranges::concat_view(
+						opEntry | ranges::views::take(opEntry.size() - op.input.size()),
+						unreachable,
+						opEntry | ranges::views::take_last(op.input.size())
+					) | ranges::to<Stack>;
+					opEntry = newStack;
+				}
+			}
+			stack = operationEntry;
+			for(size_t i = 0; i < operation.input.size(); i++)
+				stack.pop_back();
+			stack += operation.output;
+		}
+		auto unreachable = OptimizedEVMCodeTransform::tryCreateStackLayout(stack, m_layout.blockInfos.at(_block).exitLayout);
+		if (!unreachable.empty())
+		{
+			std::cout << "UNREACHABLE SLOTS AT BLOCK EXIT: " << stackToString(unreachable) << std::endl;
+			std::cout << "ATTEMPTING AD HOC FIX" << std::endl;
+			for (auto& op: _block->operations | ranges::views::reverse)
+			{
+				Stack& opEntry = m_layout.operationEntryLayout.at(&op);
+				Stack newStack = ranges::concat_view(
+					opEntry | ranges::views::take(opEntry.size() - op.input.size()),
+					unreachable,
+					opEntry | ranges::views::take_last(op.input.size())
+				) | ranges::to<Stack>;
+				opEntry = newStack;
+			}
+		}
+		stack = m_layout.blockInfos.at(_block).exitLayout;
+
+		std::visit(util::GenericVisitor{
+			[&](DFG::BasicBlock::MainExit const&) {},
+			[&](DFG::BasicBlock::Jump const& _jump)
+			{
+				auto unreachable = OptimizedEVMCodeTransform::tryCreateStackLayout(stack, m_layout.blockInfos.at(_jump.target).entryLayout);
+				if (!unreachable.empty())
+					std::cout
+						<< "UNREACHABLE SLOTS AT JUMP: " << stackToString(unreachable) << std::endl
+						<< "CANNOT FIX YET" << std::endl;
+
+				if (!_jump.backwards)
+					_addChild(_jump.target);
+			},
+			[&](DFG::BasicBlock::ConditionalJump const& _conditionalJump)
+			{
+				auto unreachable = OptimizedEVMCodeTransform::tryCreateStackLayout(stack, m_layout.blockInfos.at(_conditionalJump.zero).entryLayout);
+				if (!unreachable.empty())
+					std::cout
+						<< "UNREACHABLE SLOTS AT CONDITIONAL JUMP: " << stackToString(unreachable) << std::endl
+						<< "CANNOT FIX YET" << std::endl;
+				unreachable = OptimizedEVMCodeTransform::tryCreateStackLayout(stack, m_layout.blockInfos.at(_conditionalJump.nonZero).entryLayout);
+				if (!unreachable.empty())
+					std::cout
+						<< "UNREACHABLE SLOTS AT CONDITIONAL JUMP: " << stackToString(unreachable) << std::endl
+						<< "CANNOT FIX YET" << std::endl;
+
+				_addChild(_conditionalJump.zero);
+				_addChild(_conditionalJump.nonZero);
+			},
+			[&](DFG::BasicBlock::FunctionReturn const&) {},
+			[&](DFG::BasicBlock::Terminated const&) { },
+		}, _block->exit);
+
+	});
+}
+
 StackLayout StackLayoutGenerator::run(DFG const& _dfg)
 {
 	StackLayout stackLayout;
@@ -437,5 +527,11 @@ StackLayout StackLayoutGenerator::run(DFG const& _dfg)
 	stackLayoutGenerator.stitchConditionalJumps(*_dfg.entry);
 	for (auto& functionInfo: _dfg.functionInfo | ranges::views::values)
 		stackLayoutGenerator.stitchConditionalJumps(*functionInfo.entry);
+
+	stackLayoutGenerator.fixStackTooDeep(*_dfg.entry);
+	for (auto& functionInfo: _dfg.functionInfo | ranges::views::values)
+		stackLayoutGenerator.fixStackTooDeep(*functionInfo.entry);
+
+
 	return stackLayout;
 }

@@ -65,7 +65,6 @@ private:
 	AbstractAssembly::LabelID getFunctionLabel(Scope::Function const& _function);
 	void validateSlot(StackSlot const& _slot, Expression const& _expression);
 
-	bool tryCreateStackLayout(Stack _targetStack);
 	void compressStack();
 	void createStackLayout(Stack _targetStack);
 
@@ -75,6 +74,8 @@ public:
 	void operator()(DFG::FunctionCall const& _call);
 	void operator()(DFG::BuiltinCall const& _call);
 	void operator()(DFG::Assignment const& _assignment);
+
+	static Stack tryCreateStackLayout(Stack const& m_stack, Stack _targetStack);
 
 private:
 	static void assertLayoutCompatibility(Stack const& _currentStack, Stack const& _desiredStack);

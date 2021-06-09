@@ -69,6 +69,8 @@ private:
 	/// stack shuffling when starting from the returned layout.
 	static Stack combineStack(Stack const& _stack1, Stack const& _stack2);
 
+	void fixStackTooDeep(DFG::BasicBlock& _block);
+
 	StackLayout& m_layout;
 };
 

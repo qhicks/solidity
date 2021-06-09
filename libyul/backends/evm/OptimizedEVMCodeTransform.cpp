@@ -269,24 +269,30 @@ void OptimizedEVMCodeTransform::operator()(DFG::BasicBlock const& _block)
 	}, _block.exit);
 }
 
-bool OptimizedEVMCodeTransform::tryCreateStackLayout(Stack _targetStack)
+Stack OptimizedEVMCodeTransform::tryCreateStackLayout(Stack const& _currentStack, Stack _targetStack)
 {
+	Stack unreachable;
 	Stack commonPrefix;
-	for (auto&& [slot1, slot2]: ranges::zip_view(m_stack, _targetStack))
+	for (auto&& [slot1, slot2]: ranges::zip_view(_currentStack, _targetStack))
 	{
 		if (!(slot1 == slot2))
 			break;
 		commonPrefix.emplace_back(slot1);
 	}
-	Stack temporaryStack = m_stack | ranges::views::drop(commonPrefix.size()) | ranges::to<Stack>;
+	Stack temporaryStack = _currentStack | ranges::views::drop(commonPrefix.size()) | ranges::to<Stack>;
 
-	bool good = true;
 	::createStackLayout(temporaryStack, _targetStack  | ranges::views::drop(commonPrefix.size()) | ranges::to<Stack>, [&](unsigned _i) {
 		if (_i > 16)
-			good = false;
+		{
+			if (!util::findOffset(unreachable, temporaryStack.at(temporaryStack.size() - _i - 1)))
+				unreachable.emplace_back(temporaryStack.at(temporaryStack.size() - _i - 1));
+		}
 	}, [&](unsigned _i) {
 		if (_i > 16)
-			good = false;
+		{
+			if (!util::findOffset(unreachable, temporaryStack.at(temporaryStack.size() - _i - 1)))
+				unreachable.emplace_back(temporaryStack.at(temporaryStack.size() - _i - 1));
+		}
 	}, [&](StackSlot const& _slot) {
 		Stack currentFullStack = commonPrefix;
 		for (auto slot: temporaryStack)
@@ -294,11 +300,14 @@ bool OptimizedEVMCodeTransform::tryCreateStackLayout(Stack _targetStack)
 		if (auto depth = util::findOffset(currentFullStack | ranges::views::reverse, _slot))
 		{
 			if (*depth + 1 > 16)
-				good = false;
+			{
+				if (!util::findOffset(unreachable, _slot))
+					unreachable.emplace_back(_slot);
+			}
 			return;
 		}
 	}, [&]() {});
-	return good;
+	return unreachable;
 }
 
 void OptimizedEVMCodeTransform::compressStack()
@@ -352,7 +361,7 @@ void OptimizedEVMCodeTransform::createStackLayout(Stack _targetStack)
 
 	Stack temporaryStack = m_stack | ranges::views::drop(commonPrefix.size()) | ranges::to<Stack>;
 
-	if (!tryCreateStackLayout(_targetStack))
+	if (!tryCreateStackLayout(m_stack, _targetStack).empty())
 	{
 		// TODO: check if we can do better.
 		// Maybe switching to a general "fix everything deep first" algorithm.
