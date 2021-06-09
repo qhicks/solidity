@@ -9,3 +9,14 @@
 // stackOptimization: true
 // ----
 //   stop
+//     /* "":218:252   */
+// tag_1:
+//   pop
+//   pop
+//   pop
+//   pop
+//   0x00
+//   swap1
+//   0x00
+//   swap1
+//   jump	// out

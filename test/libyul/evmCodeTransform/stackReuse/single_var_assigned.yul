@@ -3,7 +3,5 @@
 // stackOptimization: true
 // ----
 //     /* "":11:12   */
-//   0x01
-//     /* "":2:12   */
-//   pop
+//   pop(0x01)
 //   stop
